@@ -1,0 +1,97 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-02-05",
+  "genres": {
+    "mpb": {
+      "timeSignatures": ["4/4", "6/8"],
+      "syllableRange": [7, 11],
+      "register": "formal",
+      "rhymePreference": "consonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "melodia silabica",
+        "cadencia suave",
+        "frases longas"
+      ],
+      "meterHints": [8, 9, 10]
+    },
+    "sertanejo": {
+      "timeSignatures": ["4/4"],
+      "syllableRange": [7, 10],
+      "register": "colloquial",
+      "rhymePreference": "consonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "cadencia binaria",
+        "frases simetricas",
+        "refrão marcante"
+      ],
+      "meterHints": [7, 8, 9]
+    },
+    "funk": {
+      "timeSignatures": ["4/4"],
+      "syllableRange": [6, 9],
+      "register": "slang",
+      "rhymePreference": "assonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "frases curtas",
+        "acentos ritmicos fortes",
+        "call and response"
+      ],
+      "meterHints": [6, 7, 8]
+    },
+    "gospel": {
+      "timeSignatures": ["4/4", "6/8"],
+      "syllableRange": [7, 11],
+      "register": "formal",
+      "rhymePreference": "consonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "frases elevadas",
+        "crescendo emocional",
+        "melodia ampla"
+      ],
+      "meterHints": [8, 9, 10]
+    },
+    "pagode": {
+      "timeSignatures": ["4/4"],
+      "syllableRange": [7, 10],
+      "register": "colloquial",
+      "rhymePreference": "consonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "frases balanceadas",
+        "refrão repetitivo",
+        "melodia cantavel"
+      ],
+      "meterHints": [7, 8, 9]
+    },
+    "pop": {
+      "timeSignatures": ["4/4"],
+      "syllableRange": [7, 10],
+      "register": "neutral",
+      "rhymePreference": "consonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "hook curto",
+        "frases diretas",
+        "estrutura regular"
+      ],
+      "meterHints": [8, 9]
+    },
+    "rock": {
+      "timeSignatures": ["4/4", "6/8"],
+      "syllableRange": [7, 11],
+      "register": "neutral",
+      "rhymePreference": "consonant",
+      "allowAssonant": true,
+      "melodicPatterns": [
+        "frases fortes",
+        "acentos marcados",
+        "pontes energeticas"
+      ],
+      "meterHints": [8, 9, 10]
+    }
+  }
+}

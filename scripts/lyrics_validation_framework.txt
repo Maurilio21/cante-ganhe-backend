@@ -1,0 +1,217 @@
+FRAMEWORK TÉCNICO DE VALIDAÇÃO DE LETRAS MUSICAIS POR IA
+Versão: 1.0.0
+Data: 2026-02-05
+
+1) OBJETIVO
+Estabelecer um conjunto abrangente de regras e diretrizes técnicas para validar letras musicais em português brasileiro, garantindo qualidade linguística e musical sem alterar as regras já existentes. Este framework adiciona camadas técnicas às regras atuais de prosódia, métrica, rimas, cantabilidade, linguagem, regionalismo, cacofonia, repetição inteligente, tonicidade, público-alvo e figuras de linguagem.
+
+2) PRINCÍPIOS FUNDAMENTAIS
+2.1 Prosódia Musical
+- A sílaba tônica deve cair nos tempos fortes do compasso.
+- Evitar deslocamentos artificiais da tônica.
+- Teste obrigatório: fala natural + canto.
+
+2.2 Métrica e Escansão
+- Contagem de sílabas poéticas com elisão e sinalefa.
+- Contar até a última sílaba tônica do verso.
+- Versos de mesma seção devem ter métrica similar.
+
+2.3 Rimas
+- Priorizar rimas ricas e naturais.
+- Evitar rimas pobres e forçadas.
+- Rimas toantes são aceitas em gêneros populares.
+- Naturalidade acima de raridade lexical.
+
+2.4 Linguagem e Regionalismo
+- Adequar formalidade ao gênero musical.
+- Usar contrações legítimas do português cantado.
+- Regionalismo apenas quando coerente ao gênero.
+- Evitar gírias datadas ou anacronismos.
+
+2.5 Cantabilidade
+- Favorecer vogais abertas em notas longas.
+- Evitar finais com consoantes explosivas e R forte.
+- Preferir finais vocálicos ou nasais ressonantes.
+
+2.6 Cacofonia e Fluidez
+- Eliminar encontros sonoros ridículos.
+- Evitar aliterações excessivas e hiatos problemáticos.
+
+2.7 Repetição Inteligente
+- Repetição funcional e musical (anáfora, epístrofe, refrão, eco).
+- Evitar repetição vazia.
+
+2.8 Tonicidade
+- Oxítonas: finais conclusivos.
+- Paroxítonas: uso neutro.
+- Proparoxítonas: cuidado em gêneros populares.
+
+2.9 Público-alvo
+- Vocabulário adequado à faixa etária e repertório cultural.
+
+2.10 Figuras de Linguagem
+- Preferir metáforas claras, evitar clichês.
+- Evitar imagens confusas.
+
+3) FRAMEWORK DE VALIDAÇÃO MULTIETAPAS
+3.1 Etapa 1: Validação Automática
+- Entrada: letra bruta, metadados (gênero, compasso, emoção, público).
+- Saída: relatório com métricas e score de qualidade.
+- Submódulos:
+  a) Verificação de Rimas
+  b) Análise de Métrica e Cadência
+  c) Revisão Gramatical
+  d) Coerência Temática
+  e) Aderência ao Gênero
+  f) Cacofonia e Cantabilidade
+
+3.2 Etapa 2: Revisão Especialista
+- Revisão por profissional de língua portuguesa.
+- Ajuste de nuances de regência, estilo e coerência.
+- Aprovação ou solicitação de reescrita.
+
+3.3 Etapa 3: Teste com Compositores
+- Teste de performance em melodia real.
+- Avaliação de cantabilidade, prosódia e fluidez.
+- Feedback consolidado para melhoria do sistema.
+
+4) MÓDULO 1: VERIFICAÇÃO DE RIMAS
+4.1 Tipos de Rima
+- Consoante: coincidência de vogais e consoantes a partir da sílaba tônica.
+- Assonante: coincidência apenas de vogais.
+- Rica: classes gramaticais diferentes.
+- Pobre: mesma classe gramatical e terminação previsível.
+
+4.2 Regras Técnicas
+- Identificar última palavra de cada verso.
+- Detectar sílaba tônica e extrair segmento rimático.
+- Classificar rimas por tipo e qualidade.
+- Detectar quebras indevidas: rima única isolada em seção com padrão dominante.
+
+4.3 Saídas
+- Lista de pares rimáticos por seção.
+- Lista de quebras com justificativa.
+- Score de rima.
+
+5) MÓDULO 2: ANÁLISE DE MÉTRICA E CADÊNCIA
+5.1 Sílaba Poética
+- Contagem de grupos vocálicos.
+- Elisão entre palavras terminadas em vogal e iniciadas em vogal.
+- Contagem até a sílaba tônica final.
+
+5.2 Cadência por Compasso
+- 4/4: base de 7 a 10 sílabas por verso.
+- 6/8: base de 6 a 9 sílabas por verso.
+- Comparação com faixa de gênero musical.
+
+5.3 Saídas
+- Métrica por verso.
+- Desvio padrão por seção.
+- Alertas de variação excessiva.
+
+6) MÓDULO 3: REVISÃO GRAMATICAL
+6.1 Concordância e Regência
+- Verificar concordância nominal e verbal.
+- Apontar usos incorretos comuns.
+
+6.2 Colocação Pronominal e Tempos Verbais
+- Detectar padrões coloquiais fora do gênero.
+- Sinalizar inconsistências temporais graves.
+
+6.3 Anacronismos e Gírias
+- Bloquear gírias datadas.
+- Validar compatibilidade com gênero.
+
+7) MÓDULO 4: COERÊNCIA TEMÁTICA
+7.1 Progressão Narrativa
+- Extrair palavras-chave por seção.
+- Medir similaridade entre seções.
+- Identificar deriva temática.
+
+7.2 Unidade Emocional
+- Mapear léxico positivo/negativo.
+- Sinalizar mudanças abruptas sem transição.
+
+7.3 Consistência Metafórica
+- Detectar metáforas conflitantes.
+- Evitar imagens incoerentes.
+
+8) MÓDULO 5: BANCO DE REFERÊNCIAS POR GÊNERO
+- Base validada por gênero com:
+  a) Compassos típicos
+  b) Faixas de sílabas por verso
+  c) Preferência de rima
+  d) Registro linguístico
+  e) Padrões melódicos descritivos
+
+9) PROTOCOLO DE TESTES EM 3 FASES
+Fase 1: Scripts automáticos
+- Executar validação e score.
+
+Fase 2: Revisão especialista
+- Checklist lingüístico e estilístico.
+
+Fase 3: Teste com compositores
+- Ajuste fino por performance musical.
+
+10) SCORE DE QUALIDADE
+Pesos:
+- Correção gramatical: 30%
+- Qualidade de rimas: 25%
+- Aderência musical: 25%
+- Coerência temática: 20%
+Regra: score final é média ponderada com penalizações por erros recorrentes.
+
+11) LOOP DE FEEDBACK
+- Registrar erros recorrentes em base de feedback.
+- Aumentar peso de penalização para regras com repetição alta.
+- Atualizar parâmetros de validação dinamicamente.
+
+12) ESQUEMA DE DADOS
+12.1 Entrada de Validação
+{
+  "title": "string",
+  "lyrics": "string",
+  "genre": "string",
+  "timeSignature": "4/4",
+  "metadata": {
+    "emotion": "string",
+    "targetAudience": "string"
+  }
+}
+
+12.2 Saída de Validação
+{
+  "meta": { "title": "", "genre": "", "timeSignature": "" },
+  "checks": { "rhymes": {}, "meter": {}, "grammar": {}, "coherence": {} },
+  "scores": { "grammar": 0, "rhymes": 0, "musical": 0, "theme": 0, "total": 0 },
+  "protocol": { "phase1": "", "phase2": "", "phase3": "" }
+}
+
+12.3 Feedback e Histórico
+{
+  "version": "1.0.0",
+  "totalRuns": 0,
+  "ruleHits": {},
+  "history": [],
+  "dynamicWeights": {}
+}
+
+13) INTEGRAÇÃO RECOMENDADA
+- Geração de letra por IA.
+- Rodar validação automática.
+- Aplicar refinamento com base nas falhas.
+- Encaminhar para revisão e teste.
+
+14) CHECKLIST FINAL
+- Prosódia alinhada aos tempos fortes.
+- Métrica similar por seção.
+- Rimas ricas e naturais.
+- Cantabilidade e finais vocálicos.
+- Linguagem adequada ao gênero.
+- Coerência temática e emocional.
+- Evitar cacofonia e aliteração excessiva.
+- Texto fluido quando falado.
+
+15) REGRA DE NÃO ALTERAÇÃO
+Todas as regras originais permanecem vigentes. Este framework adiciona validação técnica sem substituí-las.

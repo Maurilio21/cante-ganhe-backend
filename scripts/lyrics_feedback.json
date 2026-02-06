@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "totalRuns": 1,
+  "ruleHits": {
+    "rhyme_break": 2,
+    "meter_out_of_range": 2,
+    "meter_variance": 1
+  },
+  "history": [
+    {
+      "timestamp": "2026-02-05T20:20:33.583Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 80,
+        "musical": 76,
+        "theme": 100,
+        "total": 89
+      },
+      "genre": "pop",
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 2,
+        "musical": 3,
+        "theme": 0
+      }
+    }
+  ],
+  "dynamicWeights": {}
+}

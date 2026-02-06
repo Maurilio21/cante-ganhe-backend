@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard de Qualidade - Letras</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 24px;
+        background: #0f1115;
+        color: #e6e6e6;
+      }
+      .card {
+        background: #171a21;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+        border: 1px solid #2a2f3a;
+      }
+      .row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .metric {
+        flex: 1 1 180px;
+        background: #0f1115;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid #2a2f3a;
+      }
+      .metric h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        color: #9aa4b2;
+      }
+      .metric p {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 8px;
+        border-bottom: 1px solid #2a2f3a;
+        font-size: 13px;
+      }
+      th {
+        color: #9aa4b2;
+      }
+      .chart {
+        width: 100%;
+        height: 220px;
+        background: #0f1115;
+        border-radius: 10px;
+        border: 1px solid #2a2f3a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .badge {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #202634;
+        font-size: 12px;
+        color: #cbd5e1;
+      }
+      input[type="file"] {
+        color: #cbd5e1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Dashboard de Qualidade das Letras</h2>
+      <p>Carregue o arquivo lyrics_feedback.json para visualizar histórico e métricas.</p>
+      <input id="fileInput" type="file" accept="application/json" />
+    </div>
+
+    <div class="row">
+      <div class="metric">
+        <h3>Total de Execuções</h3>
+        <p id="runs">0</p>
+      </div>
+      <div class="metric">
+        <h3>Score Médio</h3>
+        <p id="avgScore">0</p>
+      </div>
+      <div class="metric">
+        <h3>Última Versão</h3>
+        <p id="lastVersion">-</p>
+      </div>
+      <div class="metric">
+        <h3>Último Score</h3>
+        <p id="lastScore">0</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Histórico de Scores</h3>
+      <div class="chart" id="chart"></div>
+    </div>
+
+    <div class="card">
+      <h3>Execuções Recentes</h3>
+      <table id="historyTable">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Versão</th>
+            <th>Gênero</th>
+            <th>Compasso</th>
+            <th>Score</th>
+            <th>Problemas</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <script>
+      const fileInput = document.getElementById("fileInput");
+      const runsEl = document.getElementById("runs");
+      const avgScoreEl = document.getElementById("avgScore");
+      const lastVersionEl = document.getElementById("lastVersion");
+      const lastScoreEl = document.getElementById("lastScore");
+      const chartEl = document.getElementById("chart");
+      const historyTable = document.querySelector("#historyTable tbody");
+
+      function renderChart(scores) {
+        if (!scores.length) {
+          chartEl.innerHTML = "Sem dados";
+          return;
+        }
+        const width = 640;
+        const height = 180;
+        const padding = 20;
+        const maxScore = 100;
+        const points = scores.map((score, index) => {
+          const x =
+            padding +
+            (index / Math.max(1, scores.length - 1)) * (width - padding * 2);
+          const y =
+            height -
+            padding -
+            (score / maxScore) * (height - padding * 2);
+          return `${x},${y}`;
+        });
+        chartEl.innerHTML = `
+          <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+            <polyline
+              fill="none"
+              stroke="#4f9cff"
+              stroke-width="3"
+              points="${points.join(" ")}" />
+            <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#2a2f3a" />
+            <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="#2a2f3a" />
+          </svg>
+        `;
+      }
+
+      function renderHistory(history) {
+        historyTable.innerHTML = "";
+        history.slice(-10).reverse().forEach((entry) => {
+          const issues = entry.issues
+            ? `${entry.issues.grammar}/${entry.issues.rhymes}/${entry.issues.musical}/${entry.issues.theme}`
+            : "-";
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${new Date(entry.timestamp).toLocaleString()}</td>
+            <td><span class="badge">${entry.version || "-"}</span></td>
+            <td>${entry.genre || "-"}</td>
+            <td>${entry.timeSignature || "-"}</td>
+            <td>${entry.scores?.total ?? "-"}</td>
+            <td>${issues}</td>
+          `;
+          historyTable.appendChild(row);
+        });
+      }
+
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = JSON.parse(reader.result);
+          const history = data.history || [];
+          const scores = history.map((entry) => entry.scores?.total || 0);
+          const avg =
+            scores.reduce((sum, value) => sum + value, 0) /
+            Math.max(1, scores.length);
+          runsEl.textContent = data.totalRuns || history.length || 0;
+          avgScoreEl.textContent = avg.toFixed(2);
+          lastVersionEl.textContent = history.length
+            ? history[history.length - 1].version
+            : "-";
+          lastScoreEl.textContent = history.length
+            ? history[history.length - 1].scores?.total
+            : 0;
+          renderChart(scores);
+          renderHistory(history);
+        };
+        reader.readAsText(file);
+      });
+    </script>
+  </body>
+</html>
