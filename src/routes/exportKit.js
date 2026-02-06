@@ -93,7 +93,17 @@ router.post('/export-kit', async (req, res) => {
         filesToZip.push({ path: partituraPath, name: 'Partitura.pdf' });
       } catch (err) {
         console.warn('Skipping Partitura PDF due to conversion error:', err.message);
-        // Fallback: include the XML itself if PDF conversion fails
+        try {
+          await generateTextPdf(
+            titulo || 'Música',
+            'Partitura (MusicXML)',
+            finalMusicXML,
+            partituraPath,
+          );
+          filesToZip.push({ path: partituraPath, name: 'Partitura.pdf' });
+        } catch (fallbackError) {
+          console.warn('Fallback PDF generation failed:', fallbackError.message);
+        }
         filesToZip.push({ path: xmlPath, name: 'Partitura.musicxml' });
       }
     } else {
