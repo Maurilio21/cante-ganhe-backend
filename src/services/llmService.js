@@ -39,6 +39,61 @@ Parâmetros:
 Conteúdo base (para ritmo e prosódia):
 ${data.letra}
 
+Formato obrigatório:
+- Responda APENAS com MusicXML válido
+- Inclua a declaração XML e o DOCTYPE
+- Não inclua explicações ou texto extra
+
+Exemplo válido:
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC
+    "-//Recordare//DTD MusicXML 3.1 Partwise//EN"
+    "http://www.musicxml.org/dtds/partwise.dtd">
+
+<score-partwise version="3.1">
+  <work>
+    <work-title>Exemplo</work-title>
+  </work>
+
+  <identification>
+    <encoding>
+      <software>AI Composer</software>
+      <encoding-date>2026-02-03</encoding-date>
+    </encoding>
+  </identification>
+
+  <part-list>
+    <score-part id="P1">
+      <part-name>Voz</part-name>
+    </score-part>
+  </part-list>
+
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key>
+          <fifths>0</fifths>
+        </key>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+
 Retorne APENAS o código MusicXML válido (MusicXML 3.1).`;
 
   const response = await client.chat.completions.create({

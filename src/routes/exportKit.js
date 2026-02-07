@@ -17,6 +17,86 @@ const normalizeMusicXml = (value) => {
   return match ? match[0].trim() : null;
 };
 
+const escapeXml = (value) => {
+  if (!value) {
+    return '';
+  }
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+};
+
+const buildMinimalMusicXml = (title) => {
+  const safeTitle = escapeXml(title || 'Música');
+  const date = new Date().toISOString().slice(0, 10);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC
+    "-//Recordare//DTD MusicXML 3.1 Partwise//EN"
+    "http://www.musicxml.org/dtds/partwise.dtd">
+
+<score-partwise version="3.1">
+  <work>
+    <work-title>${safeTitle}</work-title>
+  </work>
+
+  <identification>
+    <encoding>
+      <software>Cante e Ganhe</software>
+      <encoding-date>${date}</encoding-date>
+    </encoding>
+  </identification>
+
+  <part-list>
+    <score-part id="P1">
+      <part-name>Voz</part-name>
+    </score-part>
+  </part-list>
+
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key>
+          <fifths>0</fifths>
+        </key>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+};
+
 router.post('/export-kit', async (req, res) => {
   // Create unique temp directory
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
@@ -88,6 +168,10 @@ router.post('/export-kit', async (req, res) => {
         }
     } else {
         console.log('MusicXML provided by client.');
+    }
+
+    if (!finalMusicXML) {
+      finalMusicXML = buildMinimalMusicXml(titulo || 'Música');
     }
 
     if (finalMusicXML) {
