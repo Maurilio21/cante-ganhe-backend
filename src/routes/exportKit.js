@@ -9,6 +9,14 @@ import { generateScoreFromLyrics, generateCipherFromLyrics } from '../services/l
 
 const router = express.Router();
 
+const normalizeMusicXml = (value) => {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+  const match = value.match(/<score-partwise[\s\S]*<\/score-partwise>/i);
+  return match ? match[0].trim() : null;
+};
+
 router.post('/export-kit', async (req, res) => {
   // Create unique temp directory
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
@@ -61,7 +69,7 @@ router.post('/export-kit', async (req, res) => {
     }
 
     // 3. Generate Partitura PDF (from MusicXML)
-    let finalMusicXML = musicXML;
+    let finalMusicXML = normalizeMusicXml(musicXML);
     
     console.log('Step 3: Checking MusicXML...');
     if (!finalMusicXML && (letra || finalCifra)) {
@@ -73,6 +81,7 @@ router.post('/export-kit', async (req, res) => {
                 letra,
                 cifra: finalCifra
             });
+            finalMusicXML = normalizeMusicXml(finalMusicXML);
             console.log('MusicXML generated successfully.');
         } catch (e) {
             console.error('Falha ao gerar MusicXML automático:', e);
@@ -94,10 +103,12 @@ router.post('/export-kit', async (req, res) => {
       } catch (err) {
         console.warn('Skipping Partitura PDF due to conversion error:', err.message);
         try {
+          const fallbackMessage =
+            'Não foi possível converter a partitura para PDF automaticamente. O arquivo Partitura.musicxml está no kit e pode ser aberto no MuseScore.';
           await generateTextPdf(
             titulo || 'Música',
-            'Partitura (MusicXML)',
-            finalMusicXML,
+            'Partitura indisponível',
+            fallbackMessage,
             partituraPath,
           );
           filesToZip.push({ path: partituraPath, name: 'Partitura.pdf' });
@@ -108,6 +119,20 @@ router.post('/export-kit', async (req, res) => {
       }
     } else {
         console.log('No MusicXML available to convert.');
+        try {
+          const partituraPath = path.join(tempDir, 'Partitura.pdf');
+          const fallbackMessage =
+            'Partitura indisponível para esta música. Gere uma nova música ou tente exportar novamente.';
+          await generateTextPdf(
+            titulo || 'Música',
+            'Partitura indisponível',
+            fallbackMessage,
+            partituraPath,
+          );
+          filesToZip.push({ path: partituraPath, name: 'Partitura.pdf' });
+        } catch (fallbackError) {
+          console.warn('Fallback PDF generation failed:', fallbackError.message);
+        }
     }
 
     // 4. Generate Ficha Técnica PDF

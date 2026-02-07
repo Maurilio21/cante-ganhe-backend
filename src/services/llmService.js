@@ -48,9 +48,12 @@ Retorne APENAS o código MusicXML válido (MusicXML 3.1).`;
   });
 
   let content = response.choices[0].message.content;
-  // Remove markdown code blocks if present
   content = content.replace(/```xml/g, '').replace(/```/g, '').trim();
-  return content;
+  const match = content.match(/<score-partwise[\s\S]*<\/score-partwise>/i);
+  if (!match) {
+    throw new Error('MusicXML inválido');
+  }
+  return match[0].trim();
 }
 
 export async function generateCipherFromLyrics(data) {
