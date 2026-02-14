@@ -1,0 +1,138 @@
+{
+  "stem_tasks": [],
+  "user_tracks": [],
+  "tasks": [],
+  "settings": [],
+  "affiliation_logs": [],
+  "pix_payments": [],
+  "transactions": [],
+  "users": [
+    [
+      "master",
+      {
+        "id": "master",
+        "name": "Maurilio Sobral",
+        "email": "maurilio@master.com",
+        "phone": "(11) 99999-0000",
+        "password": "$2b$10$UWJTe6WKAxTOf6Jor4Xu1uJcjR23xM5UVagN3kXv/QWvyi38PlmRu",
+        "role": "master",
+        "isPro": true,
+        "whatsappNotificationsEnabled": true,
+        "permissions": {
+          "canGrantPro": true,
+          "viewUsers": true,
+          "viewLogs": true,
+          "manageAdmins": true
+        }
+      }
+    ],
+    [
+      "1",
+      {
+        "id": "1",
+        "name": "Maurílio",
+        "email": "maurilio@example.com",
+        "phone": "(11) 99999-9999",
+        "password": "$2b$10$nBIouerkl4uIRqmdt/tAXuiamkRZCpTBrJTemn58zap9zh6sohW7C",
+        "role": "user",
+        "isPro": true,
+        "permissions": {}
+      }
+    ],
+    [
+      "2",
+      {
+        "id": "2",
+        "name": "Admin",
+        "email": "admin@canteeganhe.com",
+        "phone": "(11) 88888-8888",
+        "password": "$2b$10$9YRpPurfaIAv0Xc0OWlhX.LdsnEMTUFzfg7IMVgiizrk/DlrqkWUS",
+        "role": "admin",
+        "isPro": true,
+        "permissions": {
+          "all": true
+        }
+      }
+    ],
+    [
+      "99684861-9697-4b96-b82c-4d080aa729c1",
+      {
+        "id": "99684861-9697-4b96-b82c-4d080aa729c1",
+        "name": "Maurilio Sobral",
+        "email": "maurilioucb@gmail.com",
+        "password": "$2b$10$yXp8dGA.p/QA7ph5crrMi.m79HUcbeXMobgvWB6aYk/tINuVWHlhy",
+        "role": "admin",
+        "isPro": true,
+        "permissions": {
+          "all": true
+        }
+      }
+    ]
+  ],
+  "audit_logs": [
+    {
+      "id": "e1ba5b8c-efdf-415c-ae42-8f6672bcf302",
+      "timestamp": "2026-02-13T00:40:10.954Z",
+      "adminId": "master",
+      "targetUserId": "2",
+      "action": "UPDATE_PERMISSIONS",
+      "details": {
+        "permissions": {
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "48b33971-8676-4e6e-a525-494f1204fcae",
+      "timestamp": "2026-02-13T00:40:19.428Z",
+      "adminId": "master",
+      "targetUserId": "2",
+      "action": "UPDATE_PERMISSIONS",
+      "details": {
+        "permissions": {
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "4360df20-3d42-456e-b6ac-eb815fb6028d",
+      "timestamp": "2026-02-13T00:41:08.833Z",
+      "adminId": "master",
+      "targetUserId": "99684861-9697-4b96-b82c-4d080aa729c1",
+      "action": "CREATE_ADMIN",
+      "details": {
+        "permissions": {
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "969433f4-4874-4eaf-bc6d-352bba09f9ef",
+      "timestamp": "2026-02-13T00:44:32.296Z",
+      "adminId": "master",
+      "targetUserId": "2",
+      "action": "UPDATE_PERMISSIONS",
+      "details": {
+        "permissions": {
+          "all": true
+        }
+      }
+    },
+    {
+      "id": "0a9f1cac-b8c8-472e-81e9-a06fd8c658d8",
+      "timestamp": "2026-02-13T00:44:49.202Z",
+      "adminId": "master",
+      "targetUserId": "2",
+      "action": "CHANGE_PASSWORD",
+      "details": {}
+    },
+    {
+      "id": "b3cc2f22-5ba4-48ea-9c84-c878bec59d77",
+      "timestamp": "2026-02-13T00:55:04.003Z",
+      "adminId": "master",
+      "targetUserId": "2",
+      "action": "CHANGE_PASSWORD",
+      "details": {}
+    }
+  ]
+}

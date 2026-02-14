@@ -1,10 +1,13 @@
 {
   "version": "1.0.0",
-  "totalRuns": 1,
+  "totalRuns": 26,
   "ruleHits": {
-    "rhyme_break": 2,
-    "meter_out_of_range": 2,
-    "meter_variance": 1
+    "rhyme_break": 393,
+    "meter_out_of_range": 590,
+    "meter_variance": 195,
+    "theme_drift": 165,
+    "cacophony": 1,
+    "alliteration": 5
   },
   "history": [
     {
@@ -25,7 +28,487 @@
         "musical": 3,
         "theme": 0
       }
+    },
+    {
+      "timestamp": "2026-02-07T17:34:02.150Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 40,
+        "total": 38
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 19,
+        "musical": 24,
+        "theme": 6
+      }
+    },
+    {
+      "timestamp": "2026-02-07T17:53:46.135Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 13,
+        "musical": 47,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T17:53:58.299Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 30,
+        "musical": 0,
+        "theme": 60,
+        "total": 49.5
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 7,
+        "musical": 27,
+        "theme": 4
+      }
+    },
+    {
+      "timestamp": "2026-02-07T17:56:18.521Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 50,
+        "total": 40
+      },
+      "genre": "sertanejo rom�ntico",
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 21,
+        "musical": 33,
+        "theme": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-07T17:59:36.351Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 18,
+        "musical": 37,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T18:07:09.981Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 25,
+        "musical": 29,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T18:07:28.285Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 40,
+        "total": 38
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 14,
+        "musical": 36,
+        "theme": 6
+      }
+    },
+    {
+      "timestamp": "2026-02-07T18:08:01.931Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 19,
+        "musical": 35,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T18:49:17.691Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 13,
+        "musical": 26,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:05:08.348Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 30,
+        "total": 36
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 14,
+        "musical": 22,
+        "theme": 7
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:05:41.778Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 10,
+        "musical": 0,
+        "theme": 50,
+        "total": 42.5
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 9,
+        "musical": 35,
+        "theme": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:10:41.041Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 14,
+        "musical": 43,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:13:27.078Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 50,
+        "total": 40
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 23,
+        "musical": 38,
+        "theme": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:18:26.752Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 40,
+        "total": 38
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 17,
+        "musical": 21,
+        "theme": 6
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:25:29.533Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 17,
+        "musical": 38,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:29:25.426Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 30,
+        "total": 36
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 11,
+        "musical": 25,
+        "theme": 7
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:35:18.567Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 30,
+        "total": 36
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 17,
+        "musical": 16,
+        "theme": 7
+      }
+    },
+    {
+      "timestamp": "2026-02-07T19:59:27.891Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 17,
+        "musical": 32,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T20:30:52.167Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 40,
+        "total": 38
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 17,
+        "musical": 38,
+        "theme": 6
+      }
+    },
+    {
+      "timestamp": "2026-02-07T21:08:19.043Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 20,
+        "total": 34
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 10,
+        "musical": 51,
+        "theme": 8
+      }
+    },
+    {
+      "timestamp": "2026-02-07T21:19:12.900Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 30,
+        "total": 36
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 18,
+        "musical": 27,
+        "theme": 7
+      }
+    },
+    {
+      "timestamp": "2026-02-07T21:34:36.100Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 40,
+        "total": 38
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 10,
+        "musical": 18,
+        "theme": 6
+      }
+    },
+    {
+      "timestamp": "2026-02-07T21:36:32.424Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 40,
+        "total": 38
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 21,
+        "musical": 27,
+        "theme": 6
+      }
+    },
+    {
+      "timestamp": "2026-02-07T21:46:23.344Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 0,
+        "musical": 0,
+        "theme": 50,
+        "total": 40
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 19,
+        "musical": 17,
+        "theme": 5
+      }
+    },
+    {
+      "timestamp": "2026-02-08T00:17:02.110Z",
+      "version": "1.0.0",
+      "scores": {
+        "grammar": 100,
+        "rhymes": 20,
+        "musical": 0,
+        "theme": 50,
+        "total": 45
+      },
+      "genre": null,
+      "timeSignature": "4/4",
+      "issues": {
+        "grammar": 0,
+        "rhymes": 8,
+        "musical": 40,
+        "theme": 5
+      }
     }
   ],
-  "dynamicWeights": {}
+  "dynamicWeights": {
+    "rhyme_break": 0.3,
+    "meter_out_of_range": 0.3,
+    "meter_variance": 0.3,
+    "theme_drift": 0.3
+  }
 }

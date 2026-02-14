@@ -4,7 +4,9 @@ import { parseMusic } from "./musicParser.js";
 
 dotenv.config();
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_KEY });
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_KEY || process.env.OPENAI_API_KEY,
+});
 
 export async function generateWithLLM(data) {
   const prompt = buildPrompt(data);
