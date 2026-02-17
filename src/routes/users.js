@@ -55,57 +55,72 @@ const logAction = (req, action, targetUserId, details = {}) => {
 
 // Helper to sync mock users (Optional, for dev continuity)
 const syncMockUsers = (memoryStore) => {
-    if (memoryStore.users.size === 0) {
-        // Create Master
-        const masterId = 'master';
-        if (!memoryStore.users.has(masterId)) {
-            const hashedPassword = bcrypt.hashSync('45Dyrs@45', 10);
-            memoryStore.users.set(masterId, {
-                id: masterId,
-                name: 'Maurilio Sobral',
-                email: 'maurilio@master.com', 
-                phone: '(11) 99999-0000',
-                password: hashedPassword,
-                role: 'master',
-                isPro: true,
-                whatsappNotificationsEnabled: true,
-                permissions: { canGrantPro: true, viewUsers: true, viewLogs: true, manageAdmins: true }
-            });
-        }
-        // Create Basic User
-        const userId = '1';
-        if (!memoryStore.users.has(userId)) {
-             const hashedPassword = bcrypt.hashSync('123', 10);
-             memoryStore.users.set(userId, {
-                 id: userId,
-                 name: 'Maurílio',
-                 email: 'maurilio@example.com',
-                 phone: '(11) 99999-9999',
-                 password: hashedPassword,
-                 role: 'user',
-                 isPro: true,
-                 permissions: {}
-             });
-        }
-
-        // Create Admin User (matching frontend mock)
-        const adminId = '2';
-        if (!memoryStore.users.has(adminId)) {
-             const hashedPassword = bcrypt.hashSync('123', 10);
-             memoryStore.users.set(adminId, {
-                 id: adminId,
-                 name: 'Admin',
-                 email: 'admin@canteeganhe.com',
-                 phone: '(11) 88888-8888',
-                 password: hashedPassword,
-                 role: 'admin',
-                 isPro: true,
-                 permissions: {}
-             });
-        }
-
-        memoryStore.save();
+    // Create Master
+    const masterId = 'master';
+    if (!memoryStore.users.has(masterId)) {
+        const hashedPassword = bcrypt.hashSync('45Dyrs@45', 10);
+        memoryStore.users.set(masterId, {
+            id: masterId,
+            name: 'Maurilio Sobral',
+            email: 'maurilio@master.com', 
+            phone: '(11) 99999-0000',
+            password: hashedPassword,
+            role: 'master',
+            isPro: true,
+            whatsappNotificationsEnabled: true,
+            permissions: { canGrantPro: true, viewUsers: true, viewLogs: true, manageAdmins: true }
+        });
     }
+    // Create Basic User
+    const userId = '1';
+    if (!memoryStore.users.has(userId)) {
+            const hashedPassword = bcrypt.hashSync('123', 10);
+            memoryStore.users.set(userId, {
+                id: userId,
+                name: 'Maurílio',
+                email: 'maurilio@example.com',
+                phone: '(11) 99999-9999',
+                password: hashedPassword,
+                role: 'user',
+                isPro: true,
+                permissions: {}
+            });
+    }
+
+    // Create Admin User (matching frontend mock)
+    const adminId = '2';
+    if (!memoryStore.users.has(adminId)) {
+            const hashedPassword = bcrypt.hashSync('123', 10);
+            memoryStore.users.set(adminId, {
+                id: adminId,
+                name: 'Admin',
+                email: 'admin@canteeganhe.com',
+                phone: '(11) 88888-8888',
+                password: hashedPassword,
+                role: 'admin',
+                isPro: true,
+                permissions: {}
+            });
+    }
+
+    // Create Blocked User (matching frontend mock)
+    const blockedId = '3';
+    if (!memoryStore.users.has(blockedId)) {
+            const hashedPassword = bcrypt.hashSync('123', 10);
+            memoryStore.users.set(blockedId, {
+                id: blockedId,
+                name: 'Usuário Bloqueado',
+                email: 'blocked@example.com',
+                phone: '(11) 77777-7777',
+                password: hashedPassword,
+                role: 'user',
+                status: 'blocked',
+                isPro: false,
+                permissions: {}
+            });
+    }
+
+    memoryStore.save();
 };
 
 // Login
@@ -284,6 +299,9 @@ router.delete('/:id', verifyToken, (req, res) => {
 router.post('/:id/upgrade', verifyToken, checkPermission('canGrantPro'), (req, res) => {
   const memoryStore = req.app.locals.memoryStore;
   
+  // Sync mock users to ensure consistency
+  syncMockUsers(memoryStore);
+  
   // Check global setting
   const freeUpgradeEnabled = memoryStore.settings.get('free_upgrade_enabled');
   if (req.userRole !== 'master' && freeUpgradeEnabled === false) {
@@ -307,6 +325,9 @@ router.post('/:id/upgrade', verifyToken, checkPermission('canGrantPro'), (req, r
 // Revoke PRO
 router.post('/:id/downgrade', verifyToken, checkPermission('canGrantPro'), (req, res) => {
   const memoryStore = req.app.locals.memoryStore;
+  
+  // Sync mock users to ensure consistency
+  syncMockUsers(memoryStore);
 
   // Check global setting (Should downgrades also be blocked? Requirement says "ativar/desativar a funcionalidade de upgrade gratuito". Strictly upgrades. But usually implies managing the feature. Let's block both for consistency, or just upgrade. User said "upgrade gratuito". I will stick to blocking upgrade only as per strict text, but practically blocking both prevents circumvention. Let's block upgrade only for now as it's the specific "free gift".)
   // Actually, let's block both to be safe, or ask user. 
