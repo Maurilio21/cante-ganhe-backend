@@ -142,6 +142,40 @@ router.get('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
   res.json(users);
 });
 
+// Create User (Public/Authenticated) - For Admin Panel "Add User" or Registration
+router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
+    // Note: 'viewUsers' permission allows adding users too for now, or we can add 'manageUsers'
+    // The requirement implies Master/Admin can add users.
+    
+    const { name, email, phone, password } = req.body;
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (Array.from(memoryStore.users.values()).some(u => u.email === email)) {
+        return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    const hashedPassword = bcrypt.hashSync(password || '123456', 10); // Default password if added by admin without one
+    const newUser = {
+        id: uuidv4(),
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+        role: 'user',
+        isPro: false,
+        permissions: {},
+        createdAt: new Date().toISOString()
+    };
+
+    memoryStore.users.set(newUser.id, newUser);
+    memoryStore.save();
+    
+    logAction(req, 'CREATE_USER', newUser.id);
+
+    const { password: _, ...userSafe } = newUser;
+    res.json(userSafe);
+});
+
 // Create Admin (Master only)
 router.post('/admin', verifyToken, (req, res) => {
     if (req.userRole !== 'master') return res.status(403).json({ error: 'Only Master can create admins' });
