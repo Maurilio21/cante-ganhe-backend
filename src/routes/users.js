@@ -123,6 +123,49 @@ const syncMockUsers = (memoryStore) => {
     memoryStore.save();
 };
 
+// Public Registration (no token required)
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body;
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (!memoryStore || !memoryStore.users) {
+      return res.status(500).json({ error: 'Store not initialized' });
+    }
+
+    syncMockUsers(memoryStore);
+
+    if (Array.from(memoryStore.users.values()).some((u) => u.email === email)) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password || '123456', 10);
+    const newUser = {
+      id: uuidv4(),
+      name,
+      email,
+      phone,
+      password: hashedPassword,
+      role: 'user',
+      isPro: false,
+      permissions: {},
+      createdAt: new Date().toISOString(),
+      status: 'active',
+    };
+
+    memoryStore.users.set(newUser.id, newUser);
+    memoryStore.save();
+
+    const { password: _, ...userSafe } = newUser;
+    return res.json(userSafe);
+  } catch (error) {
+    console.error('Public registration error:', error);
+    return res
+      .status(500)
+      .json({ error: 'Failed to register user. Please try again later.' });
+  }
+});
+
 // Login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;

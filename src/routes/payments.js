@@ -76,12 +76,56 @@ const processPaymentConfirmation = async (memoryStore, { userId, amountBrl, cred
     }
 
     memoryStore.transactions.push(transaction);
+
+    // Clear pending payment lock for this user (if any)
+    if (memoryStore.payment_locks && memoryStore.payment_locks[userId]) {
+      delete memoryStore.payment_locks[userId];
+    }
     memoryStore.save();
     
     return { transaction, invoice: invoiceData };
 };
 
-// --- ADMIN ENDPOINTS ---
+// --- ACCESS CONTROL & ADMIN ENDPOINTS ---
+
+// GET /api/payments/access-status?userId=...
+// Returns whether user has a pending payment lock or can access features
+router.get('/access-status', (req, res) => {
+  try {
+    const memoryStore = req.app.locals.memoryStore;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'userId is required' });
+    }
+
+    const locks = memoryStore.payment_locks || {};
+    const lock = locks[userId];
+
+    if (lock && lock.status === 'pending') {
+      return res.json({
+        success: true,
+        data: {
+          accessAllowed: false,
+          reason: 'pending_payment',
+          lock,
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        accessAllowed: true,
+        reason: null,
+        lock: null,
+      },
+    });
+  } catch (error) {
+    console.error('[Access] Status Error:', error);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
 
 // GET /api/payments/pix/pending (List Pending PIX Orders)
 router.get('/pix/pending', (req, res) => {
@@ -129,6 +173,10 @@ router.post('/pix/order', (req, res) => {
       memoryStore.pix_payments = [];
     }
 
+    if (!memoryStore.payment_locks) {
+      memoryStore.payment_locks = {};
+    }
+
     const orderId = uuidv4();
     const pixKey = '41357540000104'; // CNPJ Key
 
@@ -144,6 +192,15 @@ router.post('/pix/order', (req, res) => {
     };
 
     memoryStore.pix_payments.push(pixOrder);
+    memoryStore.payment_locks[userId] = {
+      userId,
+      provider: 'pix',
+      providerOrderId: orderId,
+      amountBrl,
+      creditsExpected: creditsPackage,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
     memoryStore.save();
 
     console.log(`[PIX] Order created: ${orderId} for User ${userId}`);
@@ -230,6 +287,11 @@ router.post('/stripe/checkout-session', async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://app.canteeganhe.com';
 
+    const memoryStore = req.app.locals.memoryStore;
+    if (!memoryStore.payment_locks) {
+      memoryStore.payment_locks = {};
+    }
+
     // Create Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -255,6 +317,18 @@ router.post('/stripe/checkout-session', async (req, res) => {
         amountBrl
       },
     });
+
+    memoryStore.payment_locks[userId] = {
+      userId,
+      provider: 'stripe',
+      providerOrderId: session.id,
+      amountBrl,
+      creditsExpected: creditsPackage,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      checkoutUrl: session.url,
+    };
+    if (memoryStore.save) memoryStore.save();
 
     res.json({ success: true, url: session.url });
   } catch (error) {
