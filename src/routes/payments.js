@@ -25,6 +25,7 @@ const processPaymentConfirmation = async (
     bankStatus = 'CONFIRMED',
     bankResponse = null,
     failureReason = null,
+    upgradeToPro = false,
   },
 ) => {
     // Check if transaction already exists
@@ -111,10 +112,18 @@ const processPaymentConfirmation = async (
               ? user.credits
               : 0;
           user.credits = currentCredits + credits;
+          if (upgradeToPro) {
+            user.isPro = true;
+          }
           memoryStore.users.set(userId, user);
           console.log(
             `[Credits] User ${userId} credited with ${credits}. Total: ${user.credits}`,
           );
+          if (upgradeToPro) {
+            console.log(
+              `[PRO] User ${userId} upgraded to PRO via ${provider} payment.`,
+            );
+          }
         } else {
           console.warn(
             `[Credits] User not found while applying credits for transaction ${transaction.id}`,
@@ -241,7 +250,13 @@ router.get('/transactions', (req, res) => {
 router.post('/pix/order', (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
-    const { userId, creditsPackage, amountBrl, cpfCnpj } = req.body;
+    const {
+      userId,
+      creditsPackage,
+      amountBrl,
+      cpfCnpj,
+      upgradeToPro = false,
+    } = req.body;
 
     if (!userId || !creditsPackage || !amountBrl) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
@@ -266,7 +281,8 @@ router.post('/pix/order', (req, res) => {
       pixKey,
       status: 'pending', // pending, confirmed, expired
       cpfCnpj: cpfCnpj || null, // Optional
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      upgradeToPro: Boolean(upgradeToPro),
     };
 
     memoryStore.pix_payments.push(pixOrder);
@@ -278,6 +294,7 @@ router.post('/pix/order', (req, res) => {
       creditsExpected: creditsPackage,
       status: 'pending',
       createdAt: new Date().toISOString(),
+      upgradeToPro: Boolean(upgradeToPro),
     };
     memoryStore.save();
 
@@ -364,6 +381,7 @@ router.post('/pix/confirm', async (req, res) => {
       bankStatus: effectiveBankStatus,
       bankResponse: bankResponse || null,
       failureReason: failureReason || null,
+      upgradeToPro: Boolean(order.upgradeToPro),
     });
 
     res.json({
@@ -400,7 +418,7 @@ router.post('/pix/confirm', async (req, res) => {
 // POST /api/payments/stripe/checkout-session
 router.post('/stripe/checkout-session', async (req, res) => {
   try {
-    const { userId, creditsPackage, amountBrl } = req.body;
+    const { userId, creditsPackage, amountBrl, upgradeToPro = false } = req.body;
 
     if (!userId || !creditsPackage || !amountBrl) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
@@ -435,7 +453,8 @@ router.post('/stripe/checkout-session', async (req, res) => {
       cancel_url: `${frontendUrl}/#/dashboard`,
       metadata: {
         credits: creditsPackage,
-        amountBrl
+        amountBrl,
+        upgradeToPro: upgradeToPro ? 'true' : 'false',
       },
     });
 
@@ -501,6 +520,8 @@ router.post('/webhook/stripe', async (req, res) => {
         // For this implementation, we assume metadata.credits is present.
         const credits = session.metadata?.credits ? parseInt(session.metadata.credits) : 0;
         const cpfCnpj = session.metadata?.cpfCnpj || null;
+        const upgradeToPro =
+          session.metadata?.upgradeToPro === 'true';
 
         if (userId) {
              await processPaymentConfirmation(memoryStore, {
@@ -512,6 +533,7 @@ router.post('/webhook/stripe', async (req, res) => {
                 cpfCnpj,
                 bankStatus: 'CONFIRMED',
                 bankResponse: { rawEventType: event.type },
+                upgradeToPro,
             });
         } else {
             console.warn('[Stripe] Missing userId in session');

@@ -171,17 +171,24 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   const memoryStore = req.app.locals.memoryStore;
-  
+
   // Sync mock users if empty
   syncMockUsers(memoryStore);
-  
+
   // Find user
-  let user = Array.from(memoryStore.users.values()).find(u => u.email === email);
+  let user = Array.from(memoryStore.users.values()).find((u) => u.email === email);
 
   if (!user) return res.status(404).json({ error: 'User not found' });
-  
+
   const validPassword = await bcrypt.compare(password, user.password);
   if (!validPassword) return res.status(401).json({ error: 'Invalid password' });
+
+  if (user.status === 'blocked') {
+    return res.status(403).json({
+      error:
+        'User is blocked. Please contact support to restore access.',
+    });
+  }
 
   const normalizedCredits =
     typeof user.credits === 'number' && Number.isFinite(user.credits)
@@ -192,11 +199,15 @@ router.post('/login', async (req, res) => {
   memoryStore.users.set(user.id, user);
   memoryStore.save();
 
-  const token = jwt.sign({ 
-    id: user.id, 
-    role: user.role, 
-    permissions: user.permissions 
-  }, SECRET_KEY, { expiresIn: '24h' });
+  const token = jwt.sign(
+    {
+      id: user.id,
+      role: user.role,
+      permissions: user.permissions,
+    },
+    SECRET_KEY,
+    { expiresIn: '24h' },
+  );
 
   const { password: _, ...userSafe } = user;
   res.json({ token, user: userSafe });
@@ -419,6 +430,33 @@ router.post('/:id/reset-credits', verifyToken, checkPermission('manageUsers'), (
 
   const { password: _, ...userSafe } = user;
   res.json({ message: 'User credits reset to 0', user: userSafe });
+});
+
+// Update User Status (active/blocked) - Admin/Master with manageUsers permission
+router.post('/:id/status', verifyToken, checkPermission('manageUsers'), (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const memoryStore = req.app.locals.memoryStore;
+
+  if (status !== 'active' && status !== 'blocked') {
+    return res.status(400).json({ error: 'Invalid status value' });
+  }
+
+  const user = memoryStore.users.get(id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (user.role === 'master') {
+    return res.status(403).json({ error: 'Cannot change Master status' });
+  }
+
+  user.status = status;
+  memoryStore.users.set(id, user);
+  memoryStore.save();
+
+  logAction(req, 'CHANGE_STATUS', id, { status });
+
+  const { password: _, ...userSafe } = user;
+  res.json({ message: 'User status updated', user: userSafe });
 });
 
 // Toggle Free Upgrade Feature (Global Setting - Master Only)
