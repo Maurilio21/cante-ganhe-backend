@@ -23,7 +23,10 @@ const createInvoice = async (data) => {
 };
 
 // Helper: Process Payment Confirmation (Shared by PIX and Stripe)
-const processPaymentConfirmation = async (memoryStore, { userId, amountBrl, credits, provider, providerId, cpfCnpj, adminId }) => {
+const processPaymentConfirmation = async (
+  memoryStore,
+  { userId, amountBrl, credits, provider, providerId, cpfCnpj, adminId },
+) => {
     // Check if transaction already exists
     if (!memoryStore.transactions) memoryStore.transactions = [];
     
@@ -77,12 +80,32 @@ const processPaymentConfirmation = async (memoryStore, { userId, amountBrl, cred
 
     memoryStore.transactions.push(transaction);
 
+    // 3. Apply credits to user balance (authoritative credit source)
+    if (memoryStore.users && typeof memoryStore.users.get === 'function') {
+      const user = memoryStore.users.get(userId);
+      if (user) {
+        const currentCredits =
+          typeof user.credits === 'number' && Number.isFinite(user.credits)
+            ? user.credits
+            : 0;
+        user.credits = currentCredits + credits;
+        memoryStore.users.set(userId, user);
+        console.log(
+          `[Credits] User ${userId} credited with ${credits}. Total: ${user.credits}`,
+        );
+      } else {
+        console.warn(
+          `[Credits] User not found while applying credits for transaction ${transaction.id}`,
+        );
+      }
+    }
+
     // Clear pending payment lock for this user (if any)
     if (memoryStore.payment_locks && memoryStore.payment_locks[userId]) {
       delete memoryStore.payment_locks[userId];
     }
     memoryStore.save();
-    
+
     return { transaction, invoice: invoiceData };
 };
 
