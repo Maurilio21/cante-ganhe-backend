@@ -6,6 +6,7 @@ import { generateTextPdf, generateFichaTecnica } from '../utils/pdfGenerator.js'
 import { xmlToPdf } from '../utils/scoreConverter.js';
 import { exportKit } from '../services/exportService.js';
 import { generateScoreFromLyrics, generateCipherFromLyrics } from '../services/llmService.js';
+import { verifyToken, requirePaidAccess } from './users.js';
 
 const router = express.Router();
 
@@ -97,7 +98,7 @@ const buildMinimalMusicXml = (title) => {
 </score-partwise>`;
 };
 
-router.post('/export-kit', async (req, res) => {
+router.post('/export-kit', verifyToken, requirePaidAccess, async (req, res) => {
   // Create unique temp directory
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-'));
 

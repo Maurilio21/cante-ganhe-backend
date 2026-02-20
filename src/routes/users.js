@@ -6,17 +6,52 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 export const SECRET_KEY = process.env.JWT_SECRET || 'secret_key_dev';
 
+const unauthorizedAttempts = new Map();
+const UNAUTHORIZED_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const UNAUTHORIZED_THRESHOLD = 5;
+
+const registerUnauthorizedAttempt = (req, reason) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown';
+  const key = String(ip);
+  const now = Date.now();
+
+  const existing = unauthorizedAttempts.get(key) || [];
+  const recent = existing.filter((ts) => now - ts < UNAUTHORIZED_WINDOW_MS);
+  recent.push(now);
+  unauthorizedAttempts.set(key, recent);
+
+  const payload = {
+    ip,
+    timestamp: new Date(now).toISOString(),
+    path: req.originalUrl || req.url,
+    method: req.method,
+    userId: req.userId || null,
+    reason,
+  };
+
+  console.warn('[SECURITY] Unauthorized access attempt:', payload);
+
+  if (recent.length >= UNAUTHORIZED_THRESHOLD) {
+    console.error('[SECURITY ALERT] Multiple unauthorized attempts detected from IP:', ip, {
+      attemptsLast10m: recent.length,
+      lastPath: payload.path,
+    });
+  }
+};
+
 // Middleware to verify JWT
 export const verifyToken = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) {
-    // For dev convenience, if no token, check if we want to allow anonymous for some reason?
-    // No, requirement says "autenticação baseada em JWT".
+    registerUnauthorizedAttempt(req, 'NO_TOKEN');
     return res.status(403).json({ error: 'No token provided' });
   }
 
   jwt.verify(token, SECRET_KEY, (err, decoded) => {
-    if (err) return res.status(401).json({ error: 'Unauthorized' });
+    if (err) {
+      registerUnauthorizedAttempt(req, 'INVALID_TOKEN');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     req.userId = decoded.id;
     req.userRole = decoded.role;
     req.permissions = decoded.permissions || {};
@@ -34,8 +69,39 @@ export const checkPermission = (permission) => {
     if (req.permissions && req.permissions[permission]) {
       return next();
     }
+    registerUnauthorizedAttempt(req, `MISSING_PERMISSION:${permission}`);
     return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
   };
+};
+
+export const requirePaidAccess = (req, res, next) => {
+  const memoryStore = req.app.locals.memoryStore;
+  if (!memoryStore || !memoryStore.users) {
+    registerUnauthorizedAttempt(req, 'STORE_NOT_INITIALIZED');
+    return res.status(503).json({ error: 'Service unavailable' });
+  }
+
+  const user = memoryStore.users.get(req.userId);
+  if (!user) {
+    registerUnauthorizedAttempt(req, 'USER_NOT_FOUND');
+    return res.status(401).json({ error: 'User not found' });
+  }
+
+  const credits =
+    typeof user.credits === 'number' && Number.isFinite(user.credits)
+      ? user.credits
+      : 0;
+
+  const hasPlan = user.isPro === true;
+
+  if (!hasPlan && credits <= 0) {
+    registerUnauthorizedAttempt(req, 'NO_PLAN_OR_CREDITS');
+    return res.status(403).json({
+      error: 'Plano ou créditos insuficientes para acessar esta funcionalidade.',
+    });
+  }
+
+  next();
 };
 
 // Helper to log actions

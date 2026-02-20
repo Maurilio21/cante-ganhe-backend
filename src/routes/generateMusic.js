@@ -4,10 +4,11 @@ import { generateWithLLM } from "../services/llmService.js";
 import { applyAntifraud } from "../services/antifraudService.js";
 import { createHash } from "../utils/hash.js";
 import { validateLyrics } from "../../scripts/lyrics_validator.js";
+import { verifyToken, requirePaidAccess } from "./users.js";
 
 const router = express.Router();
 
-router.post("/generate-music", async (req, res) => {
+router.post("/generate-music", verifyToken, requirePaidAccess, async (req, res) => {
   try {
     const {
       userId,
@@ -55,7 +56,7 @@ router.post("/generate-music", async (req, res) => {
     const musicHash = createHash(safeMusic);
 
     // 4️⃣ Persistência (exemplo)
-    // await db.music.create({ userId, ...safeMusic, musicHash })
+    // await db.music.create({ userId: req.userId, ...safeMusic, musicHash })
 
     return res.json({
       success: true,
@@ -78,7 +79,7 @@ router.post("/generate-music", async (req, res) => {
   }
 });
 
-router.post("/vocal-removal/generate", async (req, res) => {
+router.post("/vocal-removal/generate", verifyToken, requirePaidAccess, async (req, res) => {
   try {
     const pool = req.app?.locals?.pool;
     const memoryStore = req.app?.locals?.memoryStore;
