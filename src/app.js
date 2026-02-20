@@ -50,23 +50,27 @@ const loadMemoryStore = () => {
         pix_payments: json.pix_payments || [],
         transactions: json.transactions || [],
         users: new Map(json.users || []),
-        audit_logs: json.audit_logs || []
+        audit_logs: json.audit_logs || [],
+        payment_audit_logs: json.payment_audit_logs || [],
+        invoices: json.invoices || [],
       };
     }
   } catch (error) {
     console.error("Error loading dev database:", error);
   }
-  return {
-    stem_tasks: new Map(),
-    user_tracks: new Map(),
-    tasks: new Map(),
-    settings: new Map(),
-    affiliation_logs: [],
-    pix_payments: [],
-    transactions: [],
-    users: new Map(),
-    audit_logs: []
-  };
+    return {
+      stem_tasks: new Map(),
+      user_tracks: new Map(),
+      tasks: new Map(),
+      settings: new Map(),
+      affiliation_logs: [],
+      pix_payments: [],
+      transactions: [],
+      users: new Map(),
+      audit_logs: [],
+      payment_audit_logs: [],
+      invoices: [],
+    };
 };
 
 const saveMemoryStore = (store) => {
@@ -80,7 +84,9 @@ const saveMemoryStore = (store) => {
       pix_payments: store.pix_payments || [],
       transactions: store.transactions || [],
       users: Array.from(store.users ? store.users.entries() : []),
-      audit_logs: store.audit_logs || []
+      audit_logs: store.audit_logs || [],
+      payment_audit_logs: store.payment_audit_logs || [],
+      invoices: store.invoices || [],
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
     console.log("Dev database saved to disk.");

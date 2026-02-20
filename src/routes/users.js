@@ -4,10 +4,10 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
-const SECRET_KEY = process.env.JWT_SECRET || 'secret_key_dev';
+export const SECRET_KEY = process.env.JWT_SECRET || 'secret_key_dev';
 
 // Middleware to verify JWT
-const verifyToken = (req, res, next) => {
+export const verifyToken = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) {
     // For dev convenience, if no token, check if we want to allow anonymous for some reason?
@@ -25,7 +25,7 @@ const verifyToken = (req, res, next) => {
 };
 
 // Middleware to check permissions
-const checkPermission = (permission) => {
+export const checkPermission = (permission) => {
   return (req, res, next) => {
     // Master always has permission
     if (req.userRole === 'master') return next();
@@ -151,6 +151,7 @@ router.post('/register', async (req, res) => {
       permissions: {},
       createdAt: new Date().toISOString(),
       status: 'active',
+      credits: 0,
     };
 
     memoryStore.users.set(newUser.id, newUser);
@@ -181,6 +182,15 @@ router.post('/login', async (req, res) => {
   
   const validPassword = await bcrypt.compare(password, user.password);
   if (!validPassword) return res.status(401).json({ error: 'Invalid password' });
+
+  const normalizedCredits =
+    typeof user.credits === 'number' && Number.isFinite(user.credits)
+      ? user.credits
+      : 0;
+
+  user.credits = normalizedCredits;
+  memoryStore.users.set(user.id, user);
+  memoryStore.save();
 
   const token = jwt.sign({ 
     id: user.id, 
@@ -222,7 +232,8 @@ router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
         role: 'user',
         isPro: false,
         permissions: {},
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        credits: 0,
     };
 
     memoryStore.users.set(newUser.id, newUser);
@@ -253,7 +264,8 @@ router.post('/admin', verifyToken, (req, res) => {
         password: hashedPassword,
         role: 'admin',
         isPro: true, 
-        permissions: permissions || { viewUsers: true }
+        permissions: permissions || { viewUsers: true },
+        credits: 0,
     };
 
     memoryStore.users.set(newUser.id, newUser);
@@ -389,6 +401,24 @@ router.post('/:id/downgrade', verifyToken, checkPermission('canGrantPro'), (req,
   logAction(req, 'DOWNGRADE_PRO', id);
   
   res.json({ message: 'User downgraded from PRO', userId: id, isPro: false });
+});
+
+// Reset Credits (Admin/Master with manageUsers permission)
+router.post('/:id/reset-credits', verifyToken, checkPermission('manageUsers'), (req, res) => {
+  const { id } = req.params;
+  const memoryStore = req.app.locals.memoryStore;
+
+  const user = memoryStore.users.get(id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  user.credits = 0;
+  memoryStore.users.set(id, user);
+  memoryStore.save();
+
+  logAction(req, 'RESET_CREDITS', id);
+
+  const { password: _, ...userSafe } = user;
+  res.json({ message: 'User credits reset to 0', user: userSafe });
 });
 
 // Toggle Free Upgrade Feature (Global Setting - Master Only)

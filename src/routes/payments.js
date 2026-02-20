@@ -1,112 +1,167 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import Stripe from 'stripe';
+import jwt from 'jsonwebtoken';
+import { logPaymentAudit } from '../services/paymentAuditService.js';
+import { generateInvoicePdf } from '../services/invoicePdfService.js';
+import { verifyToken, SECRET_KEY } from './users.js';
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
-
-// --- SERVICES (Internal) ---
-
-// Mock eNotas API
-const createInvoice = async (data) => {
-  console.log('[eNotas] Generating invoice...', data);
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  return {
-    id: uuidv4(),
-    status: 'emitida',
-    pdfUrl: 'https://fake-enotas-url.com/invoice.pdf',
-    xmlUrl: 'https://fake-enotas-url.com/invoice.xml',
-    createdAt: new Date().toISOString()
-  };
-};
+const stripe = new Stripe(
+  process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder',
+);
 
 // Helper: Process Payment Confirmation (Shared by PIX and Stripe)
 const processPaymentConfirmation = async (
   memoryStore,
-  { userId, amountBrl, credits, provider, providerId, cpfCnpj, adminId },
+  {
+    userId,
+    amountBrl,
+    credits,
+    provider,
+    providerId,
+    cpfCnpj,
+    adminId,
+    bankStatus = 'CONFIRMED',
+    bankResponse = null,
+    failureReason = null,
+  },
 ) => {
     // Check if transaction already exists
     if (!memoryStore.transactions) memoryStore.transactions = [];
     
-    const existingTx = memoryStore.transactions.find(t => t.providerId === providerId && t.provider === provider);
+    const existingTx = memoryStore.transactions.find(
+      (t) => t.providerId === providerId && t.provider === provider,
+    );
     if (existingTx) {
-        console.log(`[Payment] Transaction already processed: ${providerId}`);
-        return { transaction: existingTx, invoice: null };
+      console.log(`[Payment] Transaction already processed: ${providerId}`);
+      return { transaction: existingTx, invoice: null };
     }
 
-    // 1. Record Transaction (Grant Credits)
     const transaction = {
       id: uuidv4(),
       userId,
-      amount: credits, // Credits amount
-      amountBrl,      // Monetary amount
+      amount: credits,
+      amountBrl,
       type: 'grant',
       provider,
       providerId,
-      status: 'paid',
+      status: bankStatus === 'CONFIRMED' ? 'paid' : 'failed',
+      bankStatus,
+      failureReason,
       createdAt: new Date().toISOString(),
-      processedBy: adminId || 'system'
+      processedBy: adminId || 'system',
     };
 
-    // 2. Generate Invoice (eNotas)
+    if (bankStatus !== 'CONFIRMED') {
+      memoryStore.transactions.push(transaction);
+      logPaymentAudit(memoryStore, {
+        provider,
+        type: 'confirmation',
+        phase: 'bank_response',
+        userId,
+        orderId: providerId,
+        transactionId: transaction.id,
+        payload: { amountBrl, credits, cpfCnpj },
+        bankStatus,
+        bankResponse,
+        status: 'rejected',
+        errorMessage: failureReason,
+      });
+      if (memoryStore.save) memoryStore.save();
+      return { transaction, invoice: null };
+    }
+
     let invoiceData = null;
     try {
-        invoiceData = await createInvoice({
-            cliente: {
-                id: userId, 
-                cpf_cnpj: cpfCnpj
-            },
-            servico: {
-                descricao: 'Créditos para geração de música por IA',
-                valor: amountBrl
-            },
-            pagamento: {
-                tipo: provider === 'pix' ? 'PIX' : 'Cartão'
-            }
-        });
+      invoiceData = await generateInvoicePdf({
+        user: memoryStore.users?.get(userId),
+        order: {
+          userId,
+          amountBrl,
+          creditsExpected: credits,
+          confirmedAt: new Date().toISOString(),
+        },
+        transaction,
+        pixInfo: { cpfCnpj },
+      });
 
-        transaction.invoiceId = invoiceData.id;
-        transaction.invoiceStatus = invoiceData.status;
-        transaction.invoiceUrl = invoiceData.pdfUrl;
+      transaction.invoiceId = invoiceData.id;
+      transaction.invoiceStatus = 'emitted';
+      transaction.invoicePath = invoiceData.path;
+      transaction.invoiceHash = invoiceData.hash;
+      transaction.status = 'completed';
 
-        console.log(`[Invoice] Generated for Transaction ${transaction.id}`);
+      if (!memoryStore.invoices) memoryStore.invoices = [];
+      memoryStore.invoices.push({
+        id: invoiceData.id,
+        userId,
+        provider,
+        providerId,
+        path: invoiceData.path,
+        hash: invoiceData.hash,
+        createdAt: invoiceData.createdAt,
+      });
 
+      if (memoryStore.users && typeof memoryStore.users.get === 'function') {
+        const user = memoryStore.users.get(userId);
+        if (user) {
+          const currentCredits =
+            typeof user.credits === 'number' && Number.isFinite(user.credits)
+              ? user.credits
+              : 0;
+          user.credits = currentCredits + credits;
+          memoryStore.users.set(userId, user);
+          console.log(
+            `[Credits] User ${userId} credited with ${credits}. Total: ${user.credits}`,
+          );
+        } else {
+          console.warn(
+            `[Credits] User not found while applying credits for transaction ${transaction.id}`,
+          );
+        }
+      }
+
+      if (memoryStore.payment_locks && memoryStore.payment_locks[userId]) {
+        delete memoryStore.payment_locks[userId];
+      }
+
+      logPaymentAudit(memoryStore, {
+        provider,
+        type: 'confirmation',
+        phase: 'completed',
+        userId,
+        orderId: providerId,
+        transactionId: transaction.id,
+        payload: { amountBrl, credits, cpfCnpj },
+        bankStatus,
+        bankResponse,
+        status: 'accepted',
+      });
     } catch (invError) {
-        console.error('[Invoice] Error generating invoice:', invError);
-        transaction.invoiceStatus = 'error';
+      console.error('[Invoice] Error generating invoice:', invError);
+      transaction.invoiceStatus = 'error';
+      transaction.status = 'invoice_failed';
+
+      logPaymentAudit(memoryStore, {
+        provider,
+        type: 'confirmation',
+        phase: 'invoice_error',
+        userId,
+        orderId: providerId,
+        transactionId: transaction.id,
+        payload: { amountBrl, credits, cpfCnpj },
+        bankStatus,
+        bankResponse,
+        status: 'error',
+        errorMessage: invError.message,
+      });
     }
 
     memoryStore.transactions.push(transaction);
+    if (memoryStore.save) memoryStore.save();
 
-    // 3. Apply credits to user balance (authoritative credit source)
-    if (memoryStore.users && typeof memoryStore.users.get === 'function') {
-      const user = memoryStore.users.get(userId);
-      if (user) {
-        const currentCredits =
-          typeof user.credits === 'number' && Number.isFinite(user.credits)
-            ? user.credits
-            : 0;
-        user.credits = currentCredits + credits;
-        memoryStore.users.set(userId, user);
-        console.log(
-          `[Credits] User ${userId} credited with ${credits}. Total: ${user.credits}`,
-        );
-      } else {
-        console.warn(
-          `[Credits] User not found while applying credits for transaction ${transaction.id}`,
-        );
-      }
-    }
-
-    // Clear pending payment lock for this user (if any)
-    if (memoryStore.payment_locks && memoryStore.payment_locks[userId]) {
-      delete memoryStore.payment_locks[userId];
-    }
-    memoryStore.save();
-
-    return { transaction, invoice: invoiceData };
+    return { transaction, invoice: transaction.invoiceStatus === 'emitted' ? invoiceData : null };
 };
 
 // --- ACCESS CONTROL & ADMIN ENDPOINTS ---
@@ -226,6 +281,16 @@ router.post('/pix/order', (req, res) => {
     };
     memoryStore.save();
 
+    logPaymentAudit(memoryStore, {
+      provider: 'pix',
+      type: 'order',
+      phase: 'created',
+      userId,
+      orderId,
+      payload: { userId, creditsPackage, amountBrl, cpfCnpj },
+      status: 'pending',
+    });
+
     console.log(`[PIX] Order created: ${orderId} for User ${userId}`);
 
     res.json({
@@ -239,6 +304,16 @@ router.post('/pix/order', (req, res) => {
     });
 
   } catch (error) {
+    const memoryStore = req.app.locals.memoryStore;
+    logPaymentAudit(memoryStore, {
+      provider: 'pix',
+      type: 'order',
+      phase: 'error',
+      userId: req.body?.userId,
+      payload: req.body,
+      status: 'error',
+      errorMessage: error.message,
+    });
     console.error('[PIX] Create Order Error:', error);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -248,7 +323,7 @@ router.post('/pix/order', (req, res) => {
 router.post('/pix/confirm', async (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
-    const { orderId, adminId } = req.body; // adminId optional if webhook
+    const { orderId, adminId, bankStatus, bankResponse, failureReason } = req.body;
 
     if (!orderId) {
       return res.status(400).json({ success: false, error: 'Order ID required' });
@@ -265,33 +340,56 @@ router.post('/pix/confirm', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Order already confirmed' });
     }
 
-    // 1. Confirm Payment
-    order.status = 'confirmed';
-    order.confirmedAt = new Date().toISOString();
-    order.confirmedBy = adminId || 'system';
+    const effectiveBankStatus = bankStatus || 'CONFIRMED';
+
+    if (effectiveBankStatus === 'CONFIRMED') {
+      order.status = 'confirmed';
+      order.confirmedAt = new Date().toISOString();
+      order.confirmedBy = adminId || 'system';
+    } else {
+      order.status = 'failed';
+      order.failedAt = new Date().toISOString();
+      order.failureReason = failureReason || 'Bank declined or timeout';
+    }
     memoryStore.save();
 
-    // 2. Release Credits & 3. Generate Invoice
     const result = await processPaymentConfirmation(memoryStore, {
-        userId: order.userId,
-        amountBrl: order.amountBrl,
-        credits: order.creditsExpected,
-        provider: 'pix',
-        providerId: orderId,
-        cpfCnpj: order.cpfCnpj,
-        adminId
+      userId: order.userId,
+      amountBrl: order.amountBrl,
+      credits: order.creditsExpected,
+      provider: 'pix',
+      providerId: orderId,
+      cpfCnpj: order.cpfCnpj,
+      adminId,
+      bankStatus: effectiveBankStatus,
+      bankResponse: bankResponse || null,
+      failureReason: failureReason || null,
     });
 
     res.json({
-      success: true,
+      success: result.transaction.status === 'completed',
       data: {
         order,
         transaction: result.transaction,
-        invoice: result.invoice
-      }
+        invoice: result.invoice,
+      },
+      error:
+        result.transaction.status === 'completed'
+          ? null
+          : 'Pagamento não confirmado ou NF não emitida.',
     });
-
   } catch (error) {
+    const memoryStore = req.app.locals.memoryStore;
+    logPaymentAudit(memoryStore, {
+      provider: 'pix',
+      type: 'confirmation',
+      phase: 'exception',
+      orderId: req.body?.orderId,
+      userId: null,
+      payload: req.body,
+      status: 'error',
+      errorMessage: error.message,
+    });
     console.error('[PIX] Confirm Order Error:', error);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -408,10 +506,12 @@ router.post('/webhook/stripe', async (req, res) => {
              await processPaymentConfirmation(memoryStore, {
                 userId,
                 amountBrl,
-                credits: credits > 0 ? credits : 1, // Fallback if 0
+                credits: credits > 0 ? credits : 1,
                 provider: 'stripe',
                 providerId: session.id,
-                cpfCnpj
+                cpfCnpj,
+                bankStatus: 'CONFIRMED',
+                bankResponse: { rawEventType: event.type },
             });
         } else {
             console.warn('[Stripe] Missing userId in session');
@@ -420,6 +520,101 @@ router.post('/webhook/stripe', async (req, res) => {
 
     res.json({received: true});
 });
+
+// --- INVOICE DOWNLOAD ---
+
+// GET /api/payments/invoices/:invoiceId/download
+router.get('/invoices/:invoiceId/download', verifyToken, (req, res) => {
+  try {
+    const memoryStore = req.app.locals.memoryStore;
+    const { invoiceId } = req.params;
+
+    if (!invoiceId) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Invoice ID is required' });
+    }
+
+    const invoiceRecord = (memoryStore.invoices || []).find(
+      (inv) => inv.id === invoiceId,
+    );
+
+    if (!invoiceRecord) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'Invoice not found' });
+    }
+
+    if (invoiceRecord.userId !== req.userId && req.userRole !== 'master') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: you do not have access to this invoice',
+      });
+    }
+
+    res.download(invoiceRecord.path, `${invoiceId}.pdf`);
+  } catch (error) {
+    console.error('[Invoice] Download Error:', error);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/payments/invoices/:invoiceId/public?token=JWT
+router.get('/invoices/:invoiceId/public', (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const token = req.query.token;
+
+    if (!invoiceId) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Invoice ID is required' });
+    }
+
+    if (!token || typeof token !== 'string') {
+      return res
+        .status(401)
+        .json({ success: false, error: 'Token is required' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, SECRET_KEY);
+    } catch (err) {
+      return res
+        .status(401)
+        .json({ success: false, error: 'Invalid or expired token' });
+    }
+
+    const memoryStore = req.app.locals.memoryStore;
+    const invoiceRecord = (memoryStore.invoices || []).find(
+      (inv) => inv.id === invoiceId,
+    );
+
+    if (!invoiceRecord) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'Invoice not found' });
+    }
+
+    if (
+      invoiceRecord.userId !== decoded.id &&
+      decoded.role !== 'master'
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: you do not have access to this invoice',
+      });
+    }
+
+    res.download(invoiceRecord.path, `${invoiceId}.pdf`);
+  } catch (error) {
+    console.error('[Invoice] Public Download Error:', error);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+export { processPaymentConfirmation };
 
 // DELETE /api/payments/pix/:orderId (Admin Master only)
 router.delete('/pix/:orderId', (req, res) => {

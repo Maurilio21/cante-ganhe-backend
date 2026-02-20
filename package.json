@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "validate-lyrics": "node scripts/lyrics_validator.js"
+    "validate-lyrics": "node scripts/lyrics_validator.js",
+    "test": "node --test"
   },
   "dependencies": {
     "archiver": "^7.0.0",
