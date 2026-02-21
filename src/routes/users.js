@@ -104,6 +104,30 @@ export const requirePaidAccess = (req, res, next) => {
 
   const hasPlan = user.isPro === true;
 
+  const transactions = memoryStore.transactions || [];
+  const hasCompletedPayment = transactions.some(
+    (t) =>
+      t.userId === user.id &&
+      (t.status === 'completed' || t.status === 'paid'),
+  );
+
+  const locks = memoryStore.payment_locks || {};
+  const lock = locks[user.id];
+  const shouldBlockForPendingPayment =
+    lock &&
+    lock.status === 'pending' &&
+    !hasCompletedPayment &&
+    !hasPlan &&
+    credits <= 0;
+
+  if (shouldBlockForPendingPayment) {
+    registerUnauthorizedAttempt(req, 'PENDING_PAYMENT_LOCK_FIRST_TIME');
+    return res.status(403).json({
+      error:
+        'Acesso temporariamente bloqueado até a confirmação do seu primeiro pagamento.',
+    });
+  }
+
   if (!hasPlan && credits <= 0) {
     registerUnauthorizedAttempt(req, 'NO_PLAN_OR_CREDITS');
     return res.status(403).json({
@@ -202,7 +226,19 @@ const syncMockUsers = (memoryStore) => {
 // Public Registration (no token required)
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, phone, password } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      password,
+      cpf,
+      addressStreet,
+      addressNumber,
+      addressComplement,
+      addressDistrict,
+      addressCity,
+      addressState,
+    } = req.body;
     const memoryStore = req.app.locals.memoryStore;
 
     if (!memoryStore || !memoryStore.users) {
@@ -221,6 +257,13 @@ router.post('/register', async (req, res) => {
       name,
       email,
       phone,
+      cpf: cpf || null,
+      addressStreet: addressStreet || null,
+      addressNumber: addressNumber || null,
+      addressComplement: addressComplement || null,
+      addressDistrict: addressDistrict || null,
+      addressCity: addressCity || null,
+      addressState: addressState || null,
       password: hashedPassword,
       role: 'user',
       isPro: false,
@@ -282,7 +325,7 @@ router.post('/login', async (req, res) => {
       permissions: user.permissions,
     },
     SECRET_KEY,
-    { expiresIn: '24h' },
+    { expiresIn: '15m' },
   );
 
   const { password: _, ...userSafe } = user;
@@ -316,10 +359,19 @@ router.get('/me', verifyToken, (req, res) => {
 
 // Create User (Public/Authenticated) - For Admin Panel "Add User" or Registration
 router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
-    // Note: 'viewUsers' permission allows adding users too for now, or we can add 'manageUsers'
-    // The requirement implies Master/Admin can add users.
-    
-    const { name, email, phone, password } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      password,
+      cpf,
+      addressStreet,
+      addressNumber,
+      addressComplement,
+      addressDistrict,
+      addressCity,
+      addressState,
+    } = req.body;
     const memoryStore = req.app.locals.memoryStore;
 
     if (Array.from(memoryStore.users.values()).some(u => u.email === email)) {
@@ -328,16 +380,23 @@ router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
 
     const hashedPassword = bcrypt.hashSync(password || '123456', 10); // Default password if added by admin without one
     const newUser = {
-        id: uuidv4(),
-        name,
-        email,
-        phone,
-        password: hashedPassword,
-        role: 'user',
-        isPro: false,
-        permissions: {},
-        createdAt: new Date().toISOString(),
-        credits: 0,
+      id: uuidv4(),
+      name,
+      email,
+      phone,
+      cpf: cpf || null,
+      addressStreet: addressStreet || null,
+      addressNumber: addressNumber || null,
+      addressComplement: addressComplement || null,
+      addressDistrict: addressDistrict || null,
+      addressCity: addressCity || null,
+      addressState: addressState || null,
+      password: hashedPassword,
+      role: 'user',
+      isPro: false,
+      permissions: {},
+      createdAt: new Date().toISOString(),
+      credits: 0,
     };
 
     memoryStore.users.set(newUser.id, newUser);

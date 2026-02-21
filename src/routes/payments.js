@@ -186,15 +186,40 @@ router.get('/access-status', (req, res) => {
       return res.status(400).json({ success: false, error: 'userId is required' });
     }
 
+    const user =
+      memoryStore.users && memoryStore.users instanceof Map
+        ? memoryStore.users.get(userId)
+        : null;
+
+    const credits =
+      user && typeof user.credits === 'number' && Number.isFinite(user.credits)
+        ? user.credits
+        : 0;
+    const hasPlan = user && user.isPro === true;
+
+    const transactions = memoryStore.transactions || [];
+    const hasCompletedPayment = transactions.some(
+      (t) =>
+        t.userId === userId &&
+        (t.status === 'completed' || t.status === 'paid'),
+    );
+
     const locks = memoryStore.payment_locks || {};
     const lock = locks[userId];
 
-    if (lock && lock.status === 'pending') {
+    const shouldBlockForPendingPayment =
+      lock &&
+      lock.status === 'pending' &&
+      !hasCompletedPayment &&
+      !hasPlan &&
+      credits <= 0;
+
+    if (shouldBlockForPendingPayment) {
       return res.json({
         success: true,
         data: {
           accessAllowed: false,
-          reason: 'pending_payment',
+          reason: 'pending_payment_first_time',
           lock,
         },
       });
