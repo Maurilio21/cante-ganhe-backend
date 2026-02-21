@@ -62,16 +62,26 @@ export const verifyToken = (req, res, next) => {
 // Middleware to check permissions
 export const checkPermission = (permission) => {
   return (req, res, next) => {
-    // Master always has permission
     if (req.userRole === 'master') return next();
-    
-    // Check specific permission
+
     if (req.permissions && req.permissions[permission]) {
       return next();
     }
     registerUnauthorizedAttempt(req, `MISSING_PERMISSION:${permission}`);
-    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+    return res
+      .status(403)
+      .json({ error: 'Forbidden: Insufficient permissions' });
   };
+};
+
+export const requireAdminOrMaster = (req, res, next) => {
+  if (req.userRole === 'master' || req.userRole === 'admin') {
+    return next();
+  }
+  registerUnauthorizedAttempt(req, 'ROLE_NOT_ADMIN');
+  return res
+    .status(403)
+    .json({ error: 'Forbidden: Admin or Master only endpoint' });
 };
 
 export const requirePaidAccess = (req, res, next) => {
@@ -283,8 +293,25 @@ router.post('/login', async (req, res) => {
 router.get('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
   const memoryStore = req.app.locals.memoryStore;
   syncMockUsers(memoryStore); // Ensure users exist
-  const users = Array.from(memoryStore.users.values()).map(({ password, ...u }) => u);
+  const users = Array.from(memoryStore.users.values()).map(
+    ({ password, ...u }) => u,
+  );
   res.json(users);
+});
+
+// Get current authenticated user (for client sync)
+router.get('/me', verifyToken, (req, res) => {
+  const memoryStore = req.app.locals.memoryStore;
+  const user = memoryStore.users.get(req.userId);
+
+  if (!user) {
+    return res
+      .status(404)
+      .json({ success: false, error: 'User not found for current token' });
+  }
+
+  const { password: _, ...userSafe } = user;
+  res.json({ success: true, data: userSafe });
 });
 
 // Create User (Public/Authenticated) - For Admin Panel "Add User" or Registration
@@ -481,22 +508,304 @@ router.post('/:id/downgrade', verifyToken, checkPermission('canGrantPro'), (req,
 });
 
 // Reset Credits (Admin/Master with manageUsers permission)
-router.post('/:id/reset-credits', verifyToken, checkPermission('manageUsers'), (req, res) => {
-  const { id } = req.params;
-  const memoryStore = req.app.locals.memoryStore;
+router.post(
+  '/:id/reset-credits',
+  verifyToken,
+  checkPermission('manageUsers'),
+  (req, res) => {
+    const { id } = req.params;
+    const memoryStore = req.app.locals.memoryStore;
 
-  const user = memoryStore.users.get(id);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = memoryStore.users.get(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-  user.credits = 0;
-  memoryStore.users.set(id, user);
-  memoryStore.save();
+    user.credits = 0;
+    memoryStore.users.set(id, user);
 
-  logAction(req, 'RESET_CREDITS', id);
+    if (!memoryStore.transactions) memoryStore.transactions = [];
+    memoryStore.transactions.push({
+      id: uuidv4(),
+      userId: id,
+      amount: 0,
+      amountBrl: 0,
+      type: 'reset_credits',
+      provider: 'admin',
+      providerId: `reset-${Date.now()}`,
+      status: 'completed',
+      bankStatus: null,
+      failureReason: null,
+      createdAt: new Date().toISOString(),
+      processedBy: req.userId,
+      reason: 'RESET_CREDITS',
+    });
 
-  const { password: _, ...userSafe } = user;
-  res.json({ message: 'User credits reset to 0', user: userSafe });
-});
+    memoryStore.save();
+
+    logAction(req, 'RESET_CREDITS', id);
+    console.log(`[Credits][RESET] Admin ${req.userId} reset credits for ${id}`);
+
+    const { password: _, ...userSafe } = user;
+    res.json({ message: 'User credits reset to 0', user: userSafe });
+  },
+);
+
+// Grant Credits (single user)
+router.post(
+  '/:id/credits/grant',
+  verifyToken,
+  requireAdminOrMaster,
+  (req, res) => {
+    const { id } = req.params;
+    const { amount, reason, expiryDate } = req.body || {};
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (
+      typeof amount !== 'number' ||
+      !Number.isFinite(amount) ||
+      !Number.isInteger(amount) ||
+      amount <= 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Quantidade de créditos inválida.' });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Motivo da concessão é obrigatório.' });
+    }
+
+    const user = memoryStore.users.get(id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'User not found' });
+    }
+
+    const currentCredits =
+      typeof user.credits === 'number' && Number.isFinite(user.credits)
+        ? user.credits
+        : 0;
+
+    const newCredits = currentCredits + amount;
+    user.credits = newCredits;
+    memoryStore.users.set(id, user);
+
+    if (!memoryStore.transactions) memoryStore.transactions = [];
+    const txId = uuidv4();
+    memoryStore.transactions.push({
+      id: txId,
+      userId: id,
+      amount,
+      amountBrl: 0,
+      type: 'manual_grant',
+      provider: 'admin',
+      providerId: `manual-grant-${txId}`,
+      status: 'completed',
+      bankStatus: null,
+      failureReason: null,
+      createdAt: new Date().toISOString(),
+      processedBy: req.userId,
+      reason: reason.trim(),
+      expiryDate: expiryDate || null,
+    });
+
+    memoryStore.save();
+
+    logAction(req, 'GRANT_CREDITS', id, {
+      amount,
+      reason: reason.trim(),
+      previousCredits: currentCredits,
+      newCredits,
+    });
+
+    console.log(
+      `[Credits][GRANT] Admin ${req.userId} granted ${amount} credits to ${id}. Total: ${newCredits}`,
+    );
+
+    const { password: _, ...userSafe } = user;
+    res.json({
+      success: true,
+      message: 'Créditos concedidos com sucesso',
+      user: userSafe,
+    });
+  },
+);
+
+// Revoke Credits (single user)
+router.post(
+  '/:id/credits/revoke',
+  verifyToken,
+  requireAdminOrMaster,
+  (req, res) => {
+    const { id } = req.params;
+    const { amount, reason } = req.body || {};
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (
+      typeof amount !== 'number' ||
+      !Number.isFinite(amount) ||
+      !Number.isInteger(amount) ||
+      amount <= 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Quantidade de créditos inválida.' });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Motivo da reversão é obrigatório.' });
+    }
+
+    const user = memoryStore.users.get(id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'User not found' });
+    }
+
+    const currentCredits =
+      typeof user.credits === 'number' && Number.isFinite(user.credits)
+        ? user.credits
+        : 0;
+
+    if (currentCredits <= 0 || amount > currentCredits) {
+      return res.status(400).json({
+        success: false,
+        error:
+          'Reversão inválida: usuário não possui créditos suficientes para esta operação.',
+      });
+    }
+
+    const newCredits = currentCredits - amount;
+    user.credits = newCredits;
+    memoryStore.users.set(id, user);
+
+    if (!memoryStore.transactions) memoryStore.transactions = [];
+    const txId = uuidv4();
+    memoryStore.transactions.push({
+      id: txId,
+      userId: id,
+      amount: -amount,
+      amountBrl: 0,
+      type: 'manual_revoke',
+      provider: 'admin',
+      providerId: `manual-revoke-${txId}`,
+      status: 'completed',
+      bankStatus: null,
+      failureReason: null,
+      createdAt: new Date().toISOString(),
+      processedBy: req.userId,
+      reason: reason.trim(),
+    });
+
+    memoryStore.save();
+
+    logAction(req, 'REVOKE_CREDITS', id, {
+      amount,
+      reason: reason.trim(),
+      previousCredits: currentCredits,
+      newCredits,
+    });
+
+    console.log(
+      `[Credits][REVOKE] Admin ${req.userId} revoked ${amount} credits from ${id}. Total: ${newCredits}`,
+    );
+
+    const { password: _, ...userSafe } = user;
+    res.json({
+      success: true,
+      message: 'Créditos revertidos com sucesso',
+      user: userSafe,
+    });
+  },
+);
+
+// Grant Credits in bulk to all active users
+router.post(
+  '/credits/grant-bulk',
+  verifyToken,
+  requireAdminOrMaster,
+  (req, res) => {
+    const { amount, reason, expiryDate } = req.body || {};
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (
+      typeof amount !== 'number' ||
+      !Number.isFinite(amount) ||
+      !Number.isInteger(amount) ||
+      amount <= 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Quantidade de créditos inválida.' });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Motivo da concessão é obrigatório.' });
+    }
+
+    const users = Array.from(memoryStore.users.values());
+    let affected = 0;
+
+    users.forEach((user) => {
+      if (user.status === 'blocked') {
+        return;
+      }
+      const currentCredits =
+        typeof user.credits === 'number' && Number.isFinite(user.credits)
+          ? user.credits
+          : 0;
+      const newCredits = currentCredits + amount;
+      user.credits = newCredits;
+      memoryStore.users.set(user.id, user);
+      affected += 1;
+    });
+
+    if (!memoryStore.transactions) memoryStore.transactions = [];
+    const txId = uuidv4();
+    memoryStore.transactions.push({
+      id: txId,
+      userId: null,
+      amount,
+      amountBrl: 0,
+      type: 'manual_grant_bulk',
+      provider: 'admin',
+      providerId: `manual-grant-bulk-${txId}`,
+      status: 'completed',
+      bankStatus: null,
+      failureReason: null,
+      createdAt: new Date().toISOString(),
+      processedBy: req.userId,
+      reason: reason.trim(),
+      expiryDate: expiryDate || null,
+      affectedUsers: affected,
+    });
+
+    memoryStore.save();
+
+    logAction(req, 'GRANT_CREDITS_BULK', 'ALL', {
+      amount,
+      reason: reason.trim(),
+      affectedUsers: affected,
+    });
+
+    console.log(
+      `[Credits][GRANT_BULK] Admin ${req.userId} granted ${amount} credits to ${affected} users.`,
+    );
+
+    res.json({
+      success: true,
+      message: 'Créditos concedidos para todos os usuários ativos',
+      affectedUsers: affected,
+    });
+  },
+);
 
 // Update User Status (active/blocked) - Admin/Master with manageUsers permission
 router.post('/:id/status', verifyToken, checkPermission('manageUsers'), (req, res) => {
