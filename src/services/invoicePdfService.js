@@ -9,6 +9,13 @@ const __dirname = path.dirname(__filename);
 
 const invoicesDir = path.resolve(__dirname, '../storage/invoices');
 
+const formatDateTimePtBr = (value) => {
+  if (!value) return 'Não informado';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('pt-BR');
+};
+
 if (!fs.existsSync(invoicesDir)) {
   fs.mkdirSync(invoicesDir, { recursive: true });
 }
@@ -90,6 +97,7 @@ export const generateInvoicePdf = async ({
   doc.text('Dados do Serviço', { underline: true });
   doc.moveDown(0.3);
   doc.text('Descrição: Créditos para geração de música por IA');
+  doc.text(`Pacote: ${order.creditsExpected} créditos`);
   doc.text(`Quantidade: ${order.creditsExpected}`);
   doc.text(`Valor unitário: R$ ${(order.amountBrl / order.creditsExpected).toFixed(2)}`);
   doc.text(`Valor total: R$ ${order.amountBrl.toFixed(2)}`);
@@ -99,11 +107,14 @@ export const generateInvoicePdf = async ({
   doc.text('Dados da Transação PIX', { underline: true });
   doc.moveDown(0.3);
   doc.text(`TxID: ${transaction.providerId}`);
-  doc.text(
-    `Data/hora confirmação: ${
-      pixInfo?.confirmedAt || order.confirmedAt || issueDate.toISOString()
-    }`,
+  const purchaseDate = order?.createdAt
+    ? formatDateTimePtBr(order.createdAt)
+    : formatDateTimePtBr(order?.confirmedAt || issueDate);
+  const confirmDate = formatDateTimePtBr(
+    pixInfo?.confirmedAt || order?.confirmedAt || issueDate,
   );
+  doc.text(`Data/hora da compra: ${purchaseDate}`);
+  doc.text(`Data/hora da confirmação: ${confirmDate}`);
   doc.text(`Valor pago: R$ ${order.amountBrl.toFixed(2)}`);
 
   doc.moveDown(1.5);

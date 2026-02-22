@@ -26,6 +26,7 @@ const processPaymentConfirmation = async (
     bankResponse = null,
     failureReason = null,
     upgradeToPro = false,
+    orderCreatedAt,
   },
 ) => {
     // Check if transaction already exists
@@ -82,6 +83,8 @@ const processPaymentConfirmation = async (
           amountBrl,
           creditsExpected: credits,
           confirmedAt: new Date().toISOString(),
+          createdAt: orderCreatedAt || new Date().toISOString(),
+          provider,
         },
         transaction,
         pixInfo: { cpfCnpj },
@@ -407,6 +410,7 @@ router.post('/pix/confirm', async (req, res) => {
       bankResponse: bankResponse || null,
       failureReason: failureReason || null,
       upgradeToPro: Boolean(order.upgradeToPro),
+      orderCreatedAt: order.createdAt,
     });
 
     res.json({
@@ -559,6 +563,9 @@ router.post('/webhook/stripe', async (req, res) => {
                 bankStatus: 'CONFIRMED',
                 bankResponse: { rawEventType: event.type },
                 upgradeToPro,
+                orderCreatedAt: session.created
+                  ? new Date(session.created * 1000).toISOString()
+                  : new Date().toISOString(),
             });
         } else {
             console.warn('[Stripe] Missing userId in session');
