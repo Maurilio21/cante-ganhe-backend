@@ -327,7 +327,7 @@ router.post('/login', async (req, res) => {
       permissions: user.permissions,
     },
     SECRET_KEY,
-    { expiresIn: '15m' },
+    { expiresIn: '30m' },
   );
 
   const { password: _, ...userSafe } = user;
