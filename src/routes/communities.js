@@ -1,4 +1,5 @@
 import express from 'express';
+import { verifyToken, requireAdminOrMaster } from './users.js';
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get('/communities', (req, res) => {
 });
 
 // Update community settings
-router.put('/communities', (req, res) => {
+router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
   const memoryStore = req.app.locals.memoryStore;
   const { whatsapp, telegram, helpWhatsapp } = req.body;
 

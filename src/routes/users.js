@@ -783,6 +783,99 @@ router.post(
   },
 );
 
+router.get(
+  '/:id/credits/history',
+  verifyToken,
+  requireAdminOrMaster,
+  (req, res) => {
+    const { id } = req.params;
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (!memoryStore || !memoryStore.users) {
+      return res
+        .status(503)
+        .json({ success: false, error: 'Store not initialized' });
+    }
+
+    const user = memoryStore.users.get(id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'User not found' });
+    }
+
+    const transactions = Array.isArray(memoryStore.transactions)
+      ? memoryStore.transactions
+      : [];
+
+    const allowedTypes = new Set([
+      'grant',
+      'manual_grant',
+      'manual_revoke',
+      'manual_grant_bulk',
+    ]);
+
+    const history = transactions
+      .filter((tx) => {
+        if (!tx || typeof tx.type !== 'string') return false;
+        if (!allowedTypes.has(tx.type)) return false;
+        if (tx.type === 'manual_grant_bulk') {
+          return true;
+        }
+        return tx.userId === id;
+      })
+      .map((tx) => {
+        const createdAt =
+          typeof tx.createdAt === 'string' && tx.createdAt.trim().length > 0
+            ? tx.createdAt
+            : new Date().toISOString();
+
+        let reason = tx.reason;
+        if (!reason || typeof reason !== 'string' || !reason.trim()) {
+          if (tx.type === 'grant') {
+            const provider =
+              typeof tx.provider === 'string' && tx.provider.length > 0
+                ? tx.provider.toUpperCase()
+                : 'PAGAMENTO';
+            reason = `Créditos via ${provider}`;
+          } else if (tx.type === 'manual_grant') {
+            reason = 'Créditos concedidos manualmente';
+          } else if (tx.type === 'manual_revoke') {
+            reason = 'Créditos revertidos manualmente';
+          } else {
+            reason = 'Ajuste de créditos';
+          }
+        }
+
+        return {
+          id: tx.id,
+          amount:
+            typeof tx.amount === 'number' && Number.isFinite(tx.amount)
+              ? tx.amount
+              : 0,
+          type: tx.type,
+          reason: reason.trim(),
+          adminId:
+            typeof tx.processedBy === 'string' && tx.processedBy.length > 0
+              ? tx.processedBy
+              : null,
+          timestamp: createdAt,
+          expiryDate:
+            typeof tx.expiryDate === 'string' && tx.expiryDate.length > 0
+              ? tx.expiryDate
+              : null,
+        };
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.timestamp).getTime();
+        const bTime = new Date(b.timestamp).getTime();
+        return aTime - bTime;
+      });
+
+    res.json({ success: true, data: history });
+  },
+);
+
 // Grant Credits in bulk to all active users
 router.post(
   '/credits/grant-bulk',

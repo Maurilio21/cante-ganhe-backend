@@ -174,6 +174,7 @@ ${heavyMetalRule}
 INSTRUÇÕES:
 1. Escreva uma letra criativa e envolvente sobre o tema (com formatação [Verso], [Refrão]).
 2. Sugira um título curto.
+3. Revise e corrija possíveis erros ortográficos, de acentuação e gramática antes de apresentar a letra final, garantindo português correto e adequado ao público-alvo.
 
 IMPORTANTE: O conteúdo deve ser fictício e original, criado apenas para fins de demonstração e inspiração.
 NÃO GERE CIFRAS OU PARTITURAS NESTA ETAPA. APENAS LETRA E TÍTULO.

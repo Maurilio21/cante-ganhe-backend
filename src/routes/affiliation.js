@@ -1,4 +1,6 @@
 import express from 'express';
+import { verifyToken, requireAdminOrMaster } from './users.js';
+
 const router = express.Router();
 
 // POST /api/affiliation/accept
@@ -37,7 +39,7 @@ router.post('/accept', (req, res) => {
 });
 
 // GET /api/affiliation/logs (Admin only)
-router.get('/logs', (req, res) => {
+router.get('/logs', verifyToken, requireAdminOrMaster, (req, res) => {
     const memoryStore = req.app.locals.memoryStore;
     if (!memoryStore || !memoryStore.affiliation_logs) {
         return res.json({ success: true, data: [] });

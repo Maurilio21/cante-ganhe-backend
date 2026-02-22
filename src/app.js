@@ -10,7 +10,10 @@ import exportKitRouter from './routes/exportKit.js';
 import settingsRouter from './routes/settings.js';
 import affiliationRouter from './routes/affiliation.js';
 import paymentRouter from './routes/payments.js';
-import usersRouter from './routes/users.js';
+import usersRouter, {
+  verifyToken as authVerifyToken,
+  requireAdminOrMaster as authRequireAdminOrMaster,
+} from './routes/users.js';
 import communitiesRouter from './routes/communities.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -168,16 +171,50 @@ const checkDatabase = async () => {
   }
 };
 
-app.use(cors({
-  origin: '*', 
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOriginsEnv = process.env.CORS_ALLOWED_ORIGINS || '';
+const allowedOrigins = allowedOriginsEnv
+  .split(',')
+  .map((value) => value.trim())
+  .filter((value) => value.length > 0);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!isProduction || allowedOrigins.length === 0) {
+        return callback(null, true);
+      }
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'), false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true,
+  }),
+);
 app.use(express.json({
   verify: (req, res, buf) => {
     req.rawBody = buf;
   }
 }));
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  if (isProduction) {
+    res.setHeader(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains',
+    );
+  }
+  next();
+});
 
 // Logger Middleware
 app.use((req, res, next) => {
@@ -205,7 +242,7 @@ app.get('/api/health', async (req, res) => {
   return res.json({ ok: true, db });
 });
 
-app.get('/api/admin/metrics', (req, res) => {
+app.get('/api/admin/metrics', authVerifyToken, authRequireAdminOrMaster, (req, res) => {
   try {
     const raw = fs.readFileSync(metricsPath, 'utf-8');
     const data = JSON.parse(raw);
