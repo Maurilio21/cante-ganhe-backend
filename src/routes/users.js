@@ -238,6 +238,7 @@ router.post('/register', async (req, res) => {
       addressDistrict,
       addressCity,
       addressState,
+      addressZip,
     } = req.body;
     const memoryStore = req.app.locals.memoryStore;
 
@@ -264,6 +265,7 @@ router.post('/register', async (req, res) => {
       addressDistrict: addressDistrict || null,
       addressCity: addressCity || null,
       addressState: addressState || null,
+      addressZip: addressZip || null,
       password: hashedPassword,
       role: 'user',
       isPro: false,
@@ -371,6 +373,7 @@ router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
       addressDistrict,
       addressCity,
       addressState,
+      addressZip,
     } = req.body;
     const memoryStore = req.app.locals.memoryStore;
 
@@ -391,6 +394,7 @@ router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
       addressDistrict: addressDistrict || null,
       addressCity: addressCity || null,
       addressState: addressState || null,
+      addressZip: addressZip || null,
       password: hashedPassword,
       role: 'user',
       isPro: false,
@@ -491,6 +495,69 @@ router.put('/:id/password', verifyToken, async (req, res) => {
     logAction(req, 'CHANGE_PASSWORD', id);
 
     res.json({ message: 'Password updated successfully' });
+});
+
+// Update basic profile (address and contact)
+router.put('/:id/profile', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const {
+    name,
+    phone,
+    cpf,
+    addressStreet,
+    addressNumber,
+    addressComplement,
+    addressDistrict,
+    addressCity,
+    addressState,
+    addressZip,
+  } = req.body;
+
+  const memoryStore = req.app.locals.memoryStore;
+
+  if (!memoryStore || !memoryStore.users) {
+    return res.status(500).json({ error: 'Store not initialized' });
+  }
+
+  const user = memoryStore.users.get(id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (req.userId !== id && req.userRole !== 'master' && req.userRole !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  if (typeof name === 'string') user.name = name;
+  if (typeof phone === 'string') user.phone = phone;
+  if (typeof cpf === 'string' || cpf === null) user.cpf = cpf || null;
+  if (typeof addressStreet === 'string' || addressStreet === null) {
+    user.addressStreet = addressStreet || null;
+  }
+  if (typeof addressNumber === 'string' || addressNumber === null) {
+    user.addressNumber = addressNumber || null;
+  }
+  if (typeof addressComplement === 'string' || addressComplement === null) {
+    user.addressComplement = addressComplement || null;
+  }
+  if (typeof addressDistrict === 'string' || addressDistrict === null) {
+    user.addressDistrict = addressDistrict || null;
+  }
+  if (typeof addressCity === 'string' || addressCity === null) {
+    user.addressCity = addressCity || null;
+  }
+  if (typeof addressState === 'string' || addressState === null) {
+    user.addressState = addressState || null;
+  }
+  if (typeof addressZip === 'string' || addressZip === null) {
+    user.addressZip = addressZip || null;
+  }
+
+  memoryStore.users.set(id, user);
+  if (memoryStore.save) memoryStore.save();
+
+  const { password: _, ...userSafe } = user;
+  res.json({ success: true, data: userSafe });
 });
 
 // Delete User/Admin (Master only)

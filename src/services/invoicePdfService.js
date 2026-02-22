@@ -49,8 +49,42 @@ export const generateInvoicePdf = async ({
   doc.moveDown(0.3);
   doc.text(`Nome: ${user?.name || 'Não informado'}`);
   if (pixInfo?.cpfCnpj) doc.text(`CPF/CNPJ: ${pixInfo.cpfCnpj}`);
+  if (!pixInfo?.cpfCnpj && user?.cpf) doc.text(`CPF/CNPJ: ${user.cpf}`);
   if (user?.email) doc.text(`E-mail: ${user.email}`);
   if (user?.phone) doc.text(`Telefone: ${user.phone}`);
+  const addressLineParts = [];
+  if (user?.addressStreet) {
+    addressLineParts.push(user.addressStreet);
+  }
+  if (user?.addressNumber) {
+    addressLineParts.push(`, ${user.addressNumber}`);
+  }
+  if (user?.addressComplement) {
+    addressLineParts.push(` - ${user.addressComplement}`);
+  }
+  if (addressLineParts.length > 0) {
+    doc.text(`Endereço: ${addressLineParts.join('')}`);
+  }
+  const addressDetails = [];
+  if (user?.addressDistrict) {
+    addressDetails.push(user.addressDistrict);
+  }
+  const cityStateParts = [];
+  if (user?.addressCity) {
+    cityStateParts.push(user.addressCity);
+  }
+  if (user?.addressState) {
+    cityStateParts.push(user.addressState);
+  }
+  if (cityStateParts.length > 0) {
+    addressDetails.push(cityStateParts.join(' - '));
+  }
+  if (user?.addressZip) {
+    addressDetails.push(`CEP: ${user.addressZip}`);
+  }
+  if (addressDetails.length > 0) {
+    doc.text(addressDetails.join(' | '));
+  }
 
   doc.moveDown(1);
   doc.text('Dados do Serviço', { underline: true });
@@ -108,4 +142,3 @@ export const generateInvoicePdf = async ({
     createdAt: issueDate.toISOString(),
   };
 };
-
