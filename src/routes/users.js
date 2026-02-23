@@ -850,6 +850,84 @@ router.post(
   },
 );
 
+router.post(
+  '/me/credits/consume',
+  verifyToken,
+  requirePaidAccess,
+  (req, res) => {
+    const memoryStore = req.app.locals.memoryStore;
+    const userId = req.userId;
+
+    if (!memoryStore || !memoryStore.users) {
+      return res
+        .status(503)
+        .json({ success: false, error: 'Store not initialized' });
+    }
+
+    const user = memoryStore.users.get(userId);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'User not found' });
+    }
+
+    const { amount } = req.body || {};
+    const creditsToConsume =
+      typeof amount === 'number' &&
+      Number.isFinite(amount) &&
+      Number.isInteger(amount) &&
+      amount > 0
+        ? amount
+        : 1;
+
+    const currentCredits =
+      typeof user.credits === 'number' && Number.isFinite(user.credits)
+        ? user.credits
+        : 0;
+
+    if (!user.isPro && currentCredits < creditsToConsume) {
+      return res.status(400).json({
+        success: false,
+        error: 'Créditos insuficientes para consumir.',
+      });
+    }
+
+    const newCredits = Math.max(0, currentCredits - creditsToConsume);
+    user.credits = newCredits;
+    memoryStore.users.set(userId, user);
+
+    if (!memoryStore.transactions) memoryStore.transactions = [];
+    const txId = uuidv4();
+    memoryStore.transactions.push({
+      id: txId,
+      userId,
+      amount: -creditsToConsume,
+      amountBrl: 0,
+      type: 'usage',
+      provider: 'app',
+      providerId: `usage-${txId}`,
+      status: 'completed',
+      bankStatus: null,
+      failureReason: null,
+      createdAt: new Date().toISOString(),
+      processedBy: userId,
+      reason: 'Consumo de créditos por geração de música',
+    });
+
+    if (memoryStore.save) memoryStore.save();
+
+    console.log(
+      `[Credits][USAGE] User ${userId} consumed ${creditsToConsume} credits. Total: ${newCredits}`,
+    );
+
+    const { password: _, ...userSafe } = user;
+    return res.json({
+      success: true,
+      data: { user: userSafe, credits: newCredits },
+    });
+  },
+);
+
 router.get(
   '/:id/credits/history',
   verifyToken,
@@ -880,6 +958,7 @@ router.get(
       'manual_grant',
       'manual_revoke',
       'manual_grant_bulk',
+      'usage',
     ]);
 
     const history = transactions
