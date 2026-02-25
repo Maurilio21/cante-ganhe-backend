@@ -265,8 +265,48 @@ const ensureStemTasksTable = async () => {
   `);
 };
 
+const ensurePaymentsTables = async () => {
+  if (!pool) {
+    return;
+  }
+  await pool.query(`
+    create table if not exists payment_transactions (
+      id text primary key,
+      user_id text,
+      amount integer,
+      amount_brl numeric(10,2),
+      type text,
+      provider text,
+      provider_id text,
+      status text,
+      bank_status text,
+      failure_reason text,
+      created_at timestamptz,
+      processed_by text,
+      invoice_id text,
+      invoice_status text,
+      invoice_path text,
+      invoice_hash text,
+      invoice_handled boolean not null default false,
+      archived boolean not null default false
+    )
+  `);
+  await pool.query(`
+    create table if not exists invoices (
+      id text primary key,
+      user_id text,
+      provider text,
+      provider_id text,
+      path text,
+      hash text,
+      created_at timestamptz
+    )
+  `);
+};
+
 ensureTracksTable().catch(() => {});
 ensureStemTasksTable().catch(() => {});
+ensurePaymentsTables().catch(() => {});
 
 const checkDatabase = async () => {
   if (!pool) {

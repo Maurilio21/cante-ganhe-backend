@@ -11,7 +11,121 @@ const stripe = new Stripe(
   process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder',
 );
 
-// Helper: Process Payment Confirmation (Shared by PIX and Stripe)
+const persistTransactionToDb = async (pool, transaction) => {
+  if (!pool) {
+    return;
+  }
+  const createdAt =
+    transaction.createdAt && !Number.isNaN(new Date(transaction.createdAt).getTime())
+      ? transaction.createdAt
+      : new Date().toISOString();
+  await pool.query(
+    `
+      insert into payment_transactions (
+        id,
+        user_id,
+        amount,
+        amount_brl,
+        type,
+        provider,
+        provider_id,
+        status,
+        bank_status,
+        failure_reason,
+        created_at,
+        processed_by,
+        invoice_id,
+        invoice_status,
+        invoice_path,
+        invoice_hash,
+        invoice_handled,
+        archived
+      )
+      values (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+      )
+      on conflict (id) do update set
+        user_id = excluded.user_id,
+        amount = excluded.amount,
+        amount_brl = excluded.amount_brl,
+        type = excluded.type,
+        provider = excluded.provider,
+        provider_id = excluded.provider_id,
+        status = excluded.status,
+        bank_status = excluded.bank_status,
+        failure_reason = excluded.failure_reason,
+        created_at = excluded.created_at,
+        processed_by = excluded.processed_by,
+        invoice_id = excluded.invoice_id,
+        invoice_status = excluded.invoice_status,
+        invoice_path = excluded.invoice_path,
+        invoice_hash = excluded.invoice_hash,
+        invoice_handled = excluded.invoice_handled,
+        archived = excluded.archived
+    `,
+    [
+      transaction.id,
+      transaction.userId || null,
+      typeof transaction.amount === 'number' ? transaction.amount : null,
+      typeof transaction.amountBrl === 'number' ? transaction.amountBrl : null,
+      transaction.type || null,
+      transaction.provider || null,
+      transaction.providerId || null,
+      transaction.status || null,
+      transaction.bankStatus || null,
+      transaction.failureReason || null,
+      createdAt,
+      transaction.processedBy || null,
+      transaction.invoiceId || null,
+      transaction.invoiceStatus || null,
+      transaction.invoicePath || null,
+      transaction.invoiceHash || null,
+      Boolean(transaction.invoiceHandled),
+      Boolean(transaction.archived),
+    ],
+  );
+};
+
+const persistInvoiceToDb = async (pool, invoice) => {
+  if (!pool) {
+    return;
+  }
+  const createdAt =
+    invoice.createdAt && !Number.isNaN(new Date(invoice.createdAt).getTime())
+      ? invoice.createdAt
+      : new Date().toISOString();
+  await pool.query(
+    `
+      insert into invoices (
+        id,
+        user_id,
+        provider,
+        provider_id,
+        path,
+        hash,
+        created_at
+      )
+      values ($1,$2,$3,$4,$5,$6,$7)
+      on conflict (id) do update set
+        user_id = excluded.user_id,
+        provider = excluded.provider,
+        provider_id = excluded.provider_id,
+        path = excluded.path,
+        hash = excluded.hash,
+        created_at = excluded.created_at
+    `,
+    [
+      invoice.id,
+      invoice.userId || null,
+      invoice.provider || null,
+      invoice.providerId || null,
+      invoice.path || null,
+      invoice.hash || null,
+      createdAt,
+    ],
+  );
+};
+
 const processPaymentConfirmation = async (
   memoryStore,
   {
@@ -28,154 +142,159 @@ const processPaymentConfirmation = async (
     upgradeToPro = false,
     orderCreatedAt,
   },
+  pool,
 ) => {
-    // Check if transaction already exists
-    if (!memoryStore.transactions) memoryStore.transactions = [];
-    
-    const existingTx = memoryStore.transactions.find(
-      (t) => t.providerId === providerId && t.provider === provider,
-    );
-    if (existingTx) {
-      console.log(`[Payment] Transaction already processed: ${providerId}`);
-      return { transaction: existingTx, invoice: null };
-    }
+  if (!memoryStore.transactions) memoryStore.transactions = [];
 
-    const transaction = {
-      id: uuidv4(),
+  const existingTx = memoryStore.transactions.find(
+    (t) => t.providerId === providerId && t.provider === provider,
+  );
+  if (existingTx) {
+    return { transaction: existingTx, invoice: null };
+  }
+
+  const transaction = {
+    id: uuidv4(),
+    userId,
+    amount: credits,
+    amountBrl,
+    type: 'grant',
+    provider,
+    providerId,
+    status: bankStatus === 'CONFIRMED' ? 'paid' : 'failed',
+    bankStatus,
+    failureReason,
+    createdAt: new Date().toISOString(),
+    processedBy: adminId || 'system',
+    invoiceHandled: false,
+    archived: false,
+  };
+
+  if (bankStatus !== 'CONFIRMED') {
+    memoryStore.transactions.push(transaction);
+    logPaymentAudit(memoryStore, {
+      provider,
+      type: 'confirmation',
+      phase: 'bank_response',
       userId,
-      amount: credits,
-      amountBrl,
-      type: 'grant',
+      orderId: providerId,
+      transactionId: transaction.id,
+      payload: { amountBrl, credits, cpfCnpj },
+      bankStatus,
+      bankResponse,
+      status: 'rejected',
+      errorMessage: failureReason,
+    });
+    if (memoryStore.save) memoryStore.save();
+    await persistTransactionToDb(pool, transaction);
+    return { transaction, invoice: null };
+  }
+
+  let invoiceData = null;
+  try {
+    invoiceData = await generateInvoicePdf({
+      user: memoryStore.users?.get(userId),
+      order: {
+        userId,
+        amountBrl,
+        creditsExpected: credits,
+        confirmedAt: new Date().toISOString(),
+        createdAt: orderCreatedAt || new Date().toISOString(),
+        provider,
+      },
+      transaction,
+      pixInfo: { cpfCnpj },
+    });
+
+    transaction.invoiceId = invoiceData.id;
+    transaction.invoiceStatus = 'emitted';
+    transaction.invoicePath = invoiceData.path;
+    transaction.invoiceHash = invoiceData.hash;
+    transaction.status = 'completed';
+
+    if (!memoryStore.invoices) memoryStore.invoices = [];
+    const invoiceRecord = {
+      id: invoiceData.id,
+      userId,
       provider,
       providerId,
-      status: bankStatus === 'CONFIRMED' ? 'paid' : 'failed',
-      bankStatus,
-      failureReason,
-      createdAt: new Date().toISOString(),
-      processedBy: adminId || 'system',
-      invoiceHandled: false,
-      archived: false,
+      path: invoiceData.path,
+      hash: invoiceData.hash,
+      createdAt: invoiceData.createdAt,
     };
+    memoryStore.invoices.push(invoiceRecord);
 
-    if (bankStatus !== 'CONFIRMED') {
-      memoryStore.transactions.push(transaction);
-      logPaymentAudit(memoryStore, {
-        provider,
-        type: 'confirmation',
-        phase: 'bank_response',
-        userId,
-        orderId: providerId,
-        transactionId: transaction.id,
-        payload: { amountBrl, credits, cpfCnpj },
-        bankStatus,
-        bankResponse,
-        status: 'rejected',
-        errorMessage: failureReason,
-      });
-      if (memoryStore.save) memoryStore.save();
-      return { transaction, invoice: null };
-    }
-
-    let invoiceData = null;
-    try {
-      invoiceData = await generateInvoicePdf({
-        user: memoryStore.users?.get(userId),
-        order: {
-          userId,
-          amountBrl,
-          creditsExpected: credits,
-          confirmedAt: new Date().toISOString(),
-          createdAt: orderCreatedAt || new Date().toISOString(),
-          provider,
-        },
-        transaction,
-        pixInfo: { cpfCnpj },
-      });
-
-      transaction.invoiceId = invoiceData.id;
-      transaction.invoiceStatus = 'emitted';
-      transaction.invoicePath = invoiceData.path;
-      transaction.invoiceHash = invoiceData.hash;
-      transaction.status = 'completed';
-
-      if (!memoryStore.invoices) memoryStore.invoices = [];
-      memoryStore.invoices.push({
-        id: invoiceData.id,
-        userId,
-        provider,
-        providerId,
-        path: invoiceData.path,
-        hash: invoiceData.hash,
-        createdAt: invoiceData.createdAt,
-      });
-
-      if (memoryStore.users && typeof memoryStore.users.get === 'function') {
-        const user = memoryStore.users.get(userId);
-        if (user) {
-          const currentCredits =
-            typeof user.credits === 'number' && Number.isFinite(user.credits)
-              ? user.credits
-              : 0;
-          user.credits = currentCredits + credits;
-          if (upgradeToPro) {
-            user.isPro = true;
-          }
-          memoryStore.users.set(userId, user);
+    if (memoryStore.users && typeof memoryStore.users.get === 'function') {
+      const user = memoryStore.users.get(userId);
+      if (user) {
+        const currentCredits =
+          typeof user.credits === 'number' && Number.isFinite(user.credits)
+            ? user.credits
+            : 0;
+        user.credits = currentCredits + credits;
+        if (upgradeToPro) {
+          user.isPro = true;
+        }
+        memoryStore.users.set(userId, user);
+        if (upgradeToPro) {
           console.log(
-            `[Credits] User ${userId} credited with ${credits}. Total: ${user.credits}`,
-          );
-          if (upgradeToPro) {
-            console.log(
-              `[PRO] User ${userId} upgraded to PRO via ${provider} payment.`,
-            );
-          }
-        } else {
-          console.warn(
-            `[Credits] User not found while applying credits for transaction ${transaction.id}`,
+            `[PRO] User ${userId} upgraded to PRO via ${provider} payment.`,
           );
         }
       }
-
-      if (memoryStore.payment_locks && memoryStore.payment_locks[userId]) {
-        delete memoryStore.payment_locks[userId];
-      }
-
-      logPaymentAudit(memoryStore, {
-        provider,
-        type: 'confirmation',
-        phase: 'completed',
-        userId,
-        orderId: providerId,
-        transactionId: transaction.id,
-        payload: { amountBrl, credits, cpfCnpj },
-        bankStatus,
-        bankResponse,
-        status: 'accepted',
-      });
-    } catch (invError) {
-      console.error('[Invoice] Error generating invoice:', invError);
-      transaction.invoiceStatus = 'error';
-      transaction.status = 'invoice_failed';
-
-      logPaymentAudit(memoryStore, {
-        provider,
-        type: 'confirmation',
-        phase: 'invoice_error',
-        userId,
-        orderId: providerId,
-        transactionId: transaction.id,
-        payload: { amountBrl, credits, cpfCnpj },
-        bankStatus,
-        bankResponse,
-        status: 'error',
-        errorMessage: invError.message,
-      });
     }
 
-    memoryStore.transactions.push(transaction);
-    if (memoryStore.save) memoryStore.save();
+    if (memoryStore.payment_locks && memoryStore.payment_locks[userId]) {
+      delete memoryStore.payment_locks[userId];
+    }
 
-    return { transaction, invoice: transaction.invoiceStatus === 'emitted' ? invoiceData : null };
+    logPaymentAudit(memoryStore, {
+      provider,
+      type: 'confirmation',
+      phase: 'completed',
+      userId,
+      orderId: providerId,
+      transactionId: transaction.id,
+      payload: { amountBrl, credits, cpfCnpj },
+      bankStatus,
+      bankResponse,
+      status: 'accepted',
+    });
+
+    await persistInvoiceToDb(pool, {
+      id: invoiceData.id,
+      userId,
+      provider,
+      providerId,
+      path: invoiceData.path,
+      hash: invoiceData.hash,
+      createdAt: invoiceData.createdAt,
+    });
+  } catch (invError) {
+    console.error('[Invoice] Error generating invoice:', invError);
+    transaction.invoiceStatus = 'error';
+    transaction.status = 'invoice_failed';
+
+    logPaymentAudit(memoryStore, {
+      provider,
+      type: 'confirmation',
+      phase: 'invoice_error',
+      userId,
+      orderId: providerId,
+      transactionId: transaction.id,
+      payload: { amountBrl, credits, cpfCnpj },
+      bankStatus,
+      bankResponse,
+      status: 'error',
+      errorMessage: invError.message,
+    });
+  }
+
+  memoryStore.transactions.push(transaction);
+  if (memoryStore.save) memoryStore.save();
+  await persistTransactionToDb(pool, transaction);
+
+  return { transaction, invoice: transaction.invoiceStatus === 'emitted' ? invoiceData : null };
 };
 
 // --- ACCESS CONTROL & ADMIN ENDPOINTS ---
@@ -259,11 +378,44 @@ router.get('/pix/pending', (req, res) => {
   }
 });
 
-// GET /api/payments/transactions (List Transactions, optionally archived)
-router.get('/transactions', (req, res) => {
+router.get('/transactions', async (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
+    const pool = req.app.locals.pool;
     const { archived } = req.query;
+    const archivedFlag = archived === 'true';
+
+    if (pool) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            user_id as "userId",
+            amount,
+            amount_brl as "amountBrl",
+            type,
+            provider,
+            provider_id as "providerId",
+            status,
+            bank_status as "bankStatus",
+            failure_reason as "failureReason",
+            created_at as "createdAt",
+            processed_by as "processedBy",
+            invoice_id as "invoiceId",
+            invoice_status as "invoiceStatus",
+            invoice_path as "invoicePath",
+            invoice_hash as "invoiceHash",
+            invoice_handled as "invoiceHandled",
+            archived
+          from payment_transactions
+          where archived = $1
+          order by created_at desc
+          limit 100
+        `,
+        [archivedFlag],
+      );
+      return res.json({ success: true, data: result.rows });
+    }
 
     let transactions = memoryStore.transactions || [];
 
@@ -284,11 +436,12 @@ router.get('/transactions', (req, res) => {
   }
 });
 
-router.patch('/transactions/:transactionId/invoice-handled', (req, res) => {
+router.patch('/transactions/:transactionId/invoice-handled', async (req, res) => {
   try {
     const { transactionId } = req.params;
     const { handled, adminId } = req.body || {};
     const memoryStore = req.app.locals.memoryStore;
+    const pool = req.app.locals.pool;
 
     if (!transactionId) {
       return res
@@ -296,9 +449,45 @@ router.patch('/transactions/:transactionId/invoice-handled', (req, res) => {
         .json({ success: false, error: 'transactionId is required' });
     }
 
-    const tx = (memoryStore.transactions || []).find(
+    let tx = (memoryStore.transactions || []).find(
       (t) => t.id === transactionId,
     );
+
+    if (!tx && pool) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            user_id as "userId",
+            amount,
+            amount_brl as "amountBrl",
+            type,
+            provider,
+            provider_id as "providerId",
+            status,
+            bank_status as "bankStatus",
+            failure_reason as "failureReason",
+            created_at as "createdAt",
+            processed_by as "processedBy",
+            invoice_id as "invoiceId",
+            invoice_status as "invoiceStatus",
+            invoice_path as "invoicePath",
+            invoice_hash as "invoiceHash",
+            invoice_handled as "invoiceHandled",
+            archived
+          from payment_transactions
+          where id = $1
+        `,
+        [transactionId],
+      );
+      if (result.rows.length > 0) {
+        tx = result.rows[0];
+        if (!Array.isArray(memoryStore.transactions)) {
+          memoryStore.transactions = [];
+        }
+        memoryStore.transactions.push(tx);
+      }
+    }
 
     if (!tx) {
       return res
@@ -320,6 +509,7 @@ router.patch('/transactions/:transactionId/invoice-handled', (req, res) => {
     });
 
     if (memoryStore.save) memoryStore.save();
+    await persistTransactionToDb(pool, tx);
 
     return res.json({ success: true, data: tx });
   } catch (error) {
@@ -330,11 +520,12 @@ router.patch('/transactions/:transactionId/invoice-handled', (req, res) => {
   }
 });
 
-router.patch('/transactions/:transactionId/archive', (req, res) => {
+router.patch('/transactions/:transactionId/archive', async (req, res) => {
   try {
     const { transactionId } = req.params;
     const { adminId } = req.body || {};
     const memoryStore = req.app.locals.memoryStore;
+    const pool = req.app.locals.pool;
 
     if (!transactionId) {
       return res
@@ -342,9 +533,45 @@ router.patch('/transactions/:transactionId/archive', (req, res) => {
         .json({ success: false, error: 'transactionId is required' });
     }
 
-    const tx = (memoryStore.transactions || []).find(
+    let tx = (memoryStore.transactions || []).find(
       (t) => t.id === transactionId,
     );
+
+    if (!tx && pool) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            user_id as "userId",
+            amount,
+            amount_brl as "amountBrl",
+            type,
+            provider,
+            provider_id as "providerId",
+            status,
+            bank_status as "bankStatus",
+            failure_reason as "failureReason",
+            created_at as "createdAt",
+            processed_by as "processedBy",
+            invoice_id as "invoiceId",
+            invoice_status as "invoiceStatus",
+            invoice_path as "invoicePath",
+            invoice_hash as "invoiceHash",
+            invoice_handled as "invoiceHandled",
+            archived
+          from payment_transactions
+          where id = $1
+        `,
+        [transactionId],
+      );
+      if (result.rows.length > 0) {
+        tx = result.rows[0];
+        if (!Array.isArray(memoryStore.transactions)) {
+          memoryStore.transactions = [];
+        }
+        memoryStore.transactions.push(tx);
+      }
+    }
 
     if (!tx) {
       return res
@@ -366,6 +593,7 @@ router.patch('/transactions/:transactionId/archive', (req, res) => {
     });
 
     if (memoryStore.save) memoryStore.save();
+    await persistTransactionToDb(pool, tx);
 
     return res.json({ success: true, data: tx });
   } catch (error) {
@@ -376,12 +604,43 @@ router.patch('/transactions/:transactionId/archive', (req, res) => {
   }
 });
 
-router.get('/transactions/export', (req, res) => {
+router.get('/transactions/export', async (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
+    const pool = req.app.locals.pool;
     const { from, to, includeArchived } = req.query;
 
-    let transactions = memoryStore.transactions || [];
+    let transactions = [];
+
+    if (pool) {
+      const rowsResult = await pool.query(
+        `
+          select
+            id,
+            user_id as "userId",
+            amount,
+            amount_brl as "amountBrl",
+            type,
+            provider,
+            provider_id as "providerId",
+            status,
+            bank_status as "bankStatus",
+            failure_reason as "failureReason",
+            created_at as "createdAt",
+            processed_by as "processedBy",
+            invoice_id as "invoiceId",
+            invoice_status as "invoiceStatus",
+            invoice_path as "invoicePath",
+            invoice_hash as "invoiceHash",
+            invoice_handled as "invoiceHandled",
+            archived
+          from payment_transactions
+        `,
+      );
+      transactions = rowsResult.rows;
+    } else {
+      transactions = memoryStore.transactions || [];
+    }
 
     if (includeArchived !== 'true') {
       transactions = transactions.filter((t) => !t.archived);
@@ -569,6 +828,7 @@ router.post('/pix/order', (req, res) => {
 router.post('/pix/confirm', async (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
+    const pool = req.app.locals.pool;
     const { orderId, adminId, bankStatus, bankResponse, failureReason } = req.body;
 
     if (!orderId) {
@@ -612,7 +872,7 @@ router.post('/pix/confirm', async (req, res) => {
       failureReason: failureReason || null,
       upgradeToPro: Boolean(order.upgradeToPro),
       orderCreatedAt: order.createdAt,
-    });
+    }, pool);
 
     res.json({
       success: result.transaction.status === 'completed',
@@ -754,6 +1014,7 @@ router.post('/webhook/stripe', async (req, res) => {
           session.metadata?.upgradeToPro === 'true';
 
         if (userId) {
+             const pool = req.app.locals.pool;
              await processPaymentConfirmation(memoryStore, {
                 userId,
                 amountBrl,
@@ -767,7 +1028,7 @@ router.post('/webhook/stripe', async (req, res) => {
                 orderCreatedAt: session.created
                   ? new Date(session.created * 1000).toISOString()
                   : new Date().toISOString(),
-            });
+            }, pool);
         } else {
             console.warn('[Stripe] Missing userId in session');
         }
@@ -779,9 +1040,10 @@ router.post('/webhook/stripe', async (req, res) => {
 // --- INVOICE DOWNLOAD ---
 
 // GET /api/payments/invoices/:invoiceId/download
-router.get('/invoices/:invoiceId/download', verifyToken, (req, res) => {
+router.get('/invoices/:invoiceId/download', verifyToken, async (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
+    const pool = req.app.locals.pool;
     const { invoiceId } = req.params;
 
     if (!invoiceId) {
@@ -790,9 +1052,34 @@ router.get('/invoices/:invoiceId/download', verifyToken, (req, res) => {
         .json({ success: false, error: 'Invoice ID is required' });
     }
 
-    const invoiceRecord = (memoryStore.invoices || []).find(
+    let invoiceRecord = (memoryStore.invoices || []).find(
       (inv) => inv.id === invoiceId,
     );
+
+    if (!invoiceRecord && pool) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            user_id as "userId",
+            provider,
+            provider_id as "providerId",
+            path,
+            hash,
+            created_at as "createdAt"
+          from invoices
+          where id = $1
+        `,
+        [invoiceId],
+      );
+      if (result.rows.length > 0) {
+        invoiceRecord = result.rows[0];
+        if (!Array.isArray(memoryStore.invoices)) {
+          memoryStore.invoices = [];
+        }
+        memoryStore.invoices.push(invoiceRecord);
+      }
+    }
 
     if (!invoiceRecord) {
       return res
@@ -815,7 +1102,7 @@ router.get('/invoices/:invoiceId/download', verifyToken, (req, res) => {
 });
 
 // GET /api/payments/invoices/:invoiceId/public?token=JWT
-router.get('/invoices/:invoiceId/public', (req, res) => {
+router.get('/invoices/:invoiceId/public', async (req, res) => {
   try {
     const { invoiceId } = req.params;
     const token = req.query.token;
@@ -842,9 +1129,36 @@ router.get('/invoices/:invoiceId/public', (req, res) => {
     }
 
     const memoryStore = req.app.locals.memoryStore;
-    const invoiceRecord = (memoryStore.invoices || []).find(
+    const pool = req.app.locals.pool;
+
+    let invoiceRecord = (memoryStore.invoices || []).find(
       (inv) => inv.id === invoiceId,
     );
+
+    if (!invoiceRecord && pool) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            user_id as "userId",
+            provider,
+            provider_id as "providerId",
+            path,
+            hash,
+            created_at as "createdAt"
+          from invoices
+          where id = $1
+        `,
+        [invoiceId],
+      );
+      if (result.rows.length > 0) {
+        invoiceRecord = result.rows[0];
+        if (!Array.isArray(memoryStore.invoices)) {
+          memoryStore.invoices = [];
+        }
+        memoryStore.invoices.push(invoiceRecord);
+      }
+    }
 
     if (!invoiceRecord) {
       return res
