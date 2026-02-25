@@ -53,6 +53,8 @@ const processPaymentConfirmation = async (
       failureReason,
       createdAt: new Date().toISOString(),
       processedBy: adminId || 'system',
+      invoiceHandled: false,
+      archived: false,
     };
 
     if (bankStatus !== 'CONFIRMED') {
@@ -257,18 +259,217 @@ router.get('/pix/pending', (req, res) => {
   }
 });
 
-// GET /api/payments/transactions (List All Transactions)
+// GET /api/payments/transactions (List Transactions, optionally archived)
 router.get('/transactions', (req, res) => {
   try {
     const memoryStore = req.app.locals.memoryStore;
-    const transactions = (memoryStore.transactions || [])
+    const { archived } = req.query;
+
+    let transactions = memoryStore.transactions || [];
+
+    if (archived === 'true') {
+      transactions = transactions.filter((t) => t.archived);
+    } else {
+      transactions = transactions.filter((t) => !t.archived);
+    }
+
+    transactions = transactions
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 100); // Limit to last 100
+      .slice(0, 100);
 
     res.json({ success: true, data: transactions });
   } catch (error) {
     console.error('[Admin] Get Transactions Error:', error);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+router.patch('/transactions/:transactionId/invoice-handled', (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const { handled, adminId } = req.body || {};
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (!transactionId) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'transactionId is required' });
+    }
+
+    const tx = (memoryStore.transactions || []).find(
+      (t) => t.id === transactionId,
+    );
+
+    if (!tx) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'Transaction not found' });
+    }
+
+    tx.invoiceHandled = Boolean(handled);
+
+    logPaymentAudit(memoryStore, {
+      provider: tx.provider || 'pix',
+      type: 'admin_action',
+      phase: 'invoice_handled',
+      userId: tx.userId || null,
+      orderId: tx.providerId || null,
+      transactionId: tx.id,
+      payload: { handled: Boolean(handled), adminId: adminId || null },
+      status: 'updated',
+    });
+
+    if (memoryStore.save) memoryStore.save();
+
+    return res.json({ success: true, data: tx });
+  } catch (error) {
+    console.error('[Admin] Update Transaction InvoiceHandled Error:', error);
+    return res
+      .status(500)
+      .json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+router.patch('/transactions/:transactionId/archive', (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const { adminId } = req.body || {};
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (!transactionId) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'transactionId is required' });
+    }
+
+    const tx = (memoryStore.transactions || []).find(
+      (t) => t.id === transactionId,
+    );
+
+    if (!tx) {
+      return res
+        .status(404)
+        .json({ success: false, error: 'Transaction not found' });
+    }
+
+    tx.archived = true;
+
+    logPaymentAudit(memoryStore, {
+      provider: tx.provider || 'pix',
+      type: 'admin_action',
+      phase: 'archive_transaction',
+      userId: tx.userId || null,
+      orderId: tx.providerId || null,
+      transactionId: tx.id,
+      payload: { archived: true, adminId: adminId || null },
+      status: 'updated',
+    });
+
+    if (memoryStore.save) memoryStore.save();
+
+    return res.json({ success: true, data: tx });
+  } catch (error) {
+    console.error('[Admin] Archive Transaction Error:', error);
+    return res
+      .status(500)
+      .json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+router.get('/transactions/export', (req, res) => {
+  try {
+    const memoryStore = req.app.locals.memoryStore;
+    const { from, to, includeArchived } = req.query;
+
+    let transactions = memoryStore.transactions || [];
+
+    if (includeArchived !== 'true') {
+      transactions = transactions.filter((t) => !t.archived);
+    }
+
+    let fromDate = null;
+    let toDate = null;
+
+    if (from) {
+      const d = new Date(from);
+      if (!Number.isNaN(d.getTime())) {
+        fromDate = d;
+      }
+    }
+
+    if (to) {
+      const d = new Date(to);
+      if (!Number.isNaN(d.getTime())) {
+        toDate = d;
+      }
+    }
+
+    transactions = transactions.filter((t) => {
+      const created = new Date(t.createdAt || t.timestamp || 0);
+      if (Number.isNaN(created.getTime())) return false;
+      if (fromDate && created < fromDate) return false;
+      if (toDate && created > toDate) return false;
+      return true;
+    });
+
+    transactions.sort(
+      (a, b) =>
+        new Date(a.createdAt || a.timestamp || 0) -
+        new Date(b.createdAt || b.timestamp || 0),
+    );
+
+    const header = [
+      'data',
+      'userId',
+      'amountBrl',
+      'credits',
+      'provider',
+      'providerId',
+      'invoiceId',
+      'invoiceStatus',
+      'invoiceHandled',
+      'archived',
+    ];
+
+    const lines = [header.join(';')];
+
+    for (const tx of transactions) {
+      const row = [
+        tx.createdAt || '',
+        tx.userId || '',
+        tx.amountBrl ?? '',
+        tx.amount ?? '',
+        tx.provider || '',
+        tx.providerId || '',
+        tx.invoiceId || '',
+        tx.invoiceStatus || '',
+        tx.invoiceHandled ? 'true' : 'false',
+        tx.archived ? 'true' : 'false',
+      ].map((value) => {
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'number') return String(value);
+        const str = String(value).replace(/"/g, '""');
+        return `"${str}"`;
+      });
+
+      lines.push(row.join(';'));
+    }
+
+    const csv = lines.join('\n');
+    const fileName = `nf_export_${from || 'inicio'}_${to || 'fim'}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"`,
+    );
+
+    return res.send(csv);
+  } catch (error) {
+    console.error('[Admin] Export Transactions CSV Error:', error);
+    return res
+      .status(500)
+      .json({ success: false, error: 'Internal Server Error' });
   }
 });
 

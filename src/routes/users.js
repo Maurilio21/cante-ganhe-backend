@@ -920,6 +920,12 @@ router.post(
       `[Credits][USAGE] User ${userId} consumed ${creditsToConsume} credits. Total: ${newCredits}`,
     );
 
+    logAction(req, 'CONSUME_CREDITS', userId, {
+      amount: creditsToConsume,
+      previousCredits: currentCredits,
+      newCredits,
+    });
+
     const { password: _, ...userSafe } = user;
     return res.json({
       success: true,

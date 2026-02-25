@@ -13,7 +13,11 @@ const formatDateTimePtBr = (value) => {
   if (!value) return 'Não informado';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString('pt-BR');
+
+  const utcTime = date.getTime() + date.getTimezoneOffset() * 60000;
+  const brasiliaDate = new Date(utcTime - 3 * 60 * 60 * 1000);
+
+  return brasiliaDate.toLocaleString('pt-BR');
 };
 
 if (!fs.existsSync(invoicesDir)) {
@@ -41,7 +45,7 @@ export const generateInvoicePdf = async ({
   doc
     .fontSize(10)
     .text(`Número: ${invoiceId}`, { align: 'center' })
-    .text(`Data de emissão: ${issueDate.toLocaleString('pt-BR')}`, {
+    .text(`Data de emissão (Horário de Brasília): ${formatDateTimePtBr(issueDate)}`, {
       align: 'center',
     });
 
@@ -113,8 +117,8 @@ export const generateInvoicePdf = async ({
   const confirmDate = formatDateTimePtBr(
     pixInfo?.confirmedAt || order?.confirmedAt || issueDate,
   );
-  doc.text(`Data/hora da compra: ${purchaseDate}`);
-  doc.text(`Data/hora da confirmação: ${confirmDate}`);
+  doc.text(`Data/hora da compra (Horário de Brasília): ${purchaseDate}`);
+  doc.text(`Data/hora da confirmação (Horário de Brasília): ${confirmDate}`);
   doc.text(`Valor pago: R$ ${order.amountBrl.toFixed(2)}`);
 
   doc.moveDown(1.5);

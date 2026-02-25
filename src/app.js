@@ -38,13 +38,92 @@ app.locals.pool = pool;
 
 // File-based persistence for development (when DB is unavailable)
 const DB_FILE = path.resolve(__dirname, 'dev_db.json');
+const DB_BACKUP_FILE = path.resolve(__dirname, 'dev_db.backup.json');
+
+const reconcileCredits = (store) => {
+  try {
+    const transactions = Array.isArray(store.transactions)
+      ? [...store.transactions]
+      : [];
+
+    transactions.sort((a, b) => {
+      const aDate = new Date(a.createdAt || a.timestamp || 0).getTime();
+      const bDate = new Date(b.createdAt || b.timestamp || 0).getTime();
+      return aDate - bDate;
+    });
+
+    const creditsByUser = new Map();
+
+    for (const tx of transactions) {
+      if (!tx || !tx.userId || typeof tx.type !== 'string') {
+        continue;
+      }
+
+      const userId = tx.userId;
+      let current = creditsByUser.has(userId) ? creditsByUser.get(userId) : 0;
+      const type = tx.type;
+
+      if (type === 'reset_credits') {
+        current = 0;
+      } else if (
+        type === 'grant' ||
+        type === 'manual_grant' ||
+        type === 'manual_grant_bulk' ||
+        type === 'manual_revoke' ||
+        type === 'usage'
+      ) {
+        const amount =
+          typeof tx.amount === 'number' && Number.isFinite(tx.amount)
+            ? tx.amount
+            : 0;
+        current += amount;
+      } else {
+        continue;
+      }
+
+      if (!Number.isFinite(current) || current < 0) {
+        current = 0;
+      }
+
+      creditsByUser.set(userId, current);
+    }
+
+    if (!(store.users instanceof Map)) {
+      return;
+    }
+
+    for (const [id, user] of store.users.entries()) {
+      const stored =
+        typeof user.credits === 'number' && Number.isFinite(user.credits)
+          ? user.credits
+          : 0;
+      const expected = creditsByUser.has(id) ? creditsByUser.get(id) : stored;
+
+      if (!('credits' in user)) {
+        user.credits = expected;
+        store.users.set(id, user);
+        continue;
+      }
+
+      if (expected !== stored) {
+        console.log(
+          `[Credits][RECONCILE] User ${id}: correcting credits from ${stored} to ${expected}`,
+        );
+        user.credits = expected;
+        store.users.set(id, user);
+      }
+    }
+  } catch (error) {
+    console.error('[Credits][RECONCILE] Error while reconciling credits:', error);
+  }
+};
 
 const loadMemoryStore = () => {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf8');
       const json = JSON.parse(data);
-      return {
+      const store = {
         stem_tasks: new Map(json.stem_tasks),
         user_tracks: new Map(json.user_tracks),
         tasks: new Map(json.tasks || []), // Fallback for other tasks if needed
@@ -57,6 +136,29 @@ const loadMemoryStore = () => {
         payment_audit_logs: json.payment_audit_logs || [],
         invoices: json.invoices || [],
       };
+      reconcileCredits(store);
+      return store;
+    }
+
+    if (fs.existsSync(DB_BACKUP_FILE)) {
+      const backupData = fs.readFileSync(DB_BACKUP_FILE, 'utf8');
+      const backupJson = JSON.parse(backupData);
+      const backupStore = {
+        stem_tasks: new Map(backupJson.stem_tasks),
+        user_tracks: new Map(backupJson.user_tracks),
+        tasks: new Map(backupJson.tasks || []),
+        settings: new Map(backupJson.settings || []),
+        affiliation_logs: backupJson.affiliation_logs || [],
+        pix_payments: backupJson.pix_payments || [],
+        transactions: backupJson.transactions || [],
+        users: new Map(backupJson.users || []),
+        audit_logs: backupJson.audit_logs || [],
+        payment_audit_logs: backupJson.payment_audit_logs || [],
+        invoices: backupJson.invoices || [],
+      };
+      reconcileCredits(backupStore);
+      console.warn('Loaded memory store from backup file.');
+      return backupStore;
     }
   } catch (error) {
     console.error("Error loading dev database:", error);
@@ -78,6 +180,14 @@ const loadMemoryStore = () => {
 
 const saveMemoryStore = (store) => {
   try {
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        fs.copyFileSync(DB_FILE, DB_BACKUP_FILE);
+      } catch (backupError) {
+        console.error('Error creating dev database backup:', backupError);
+      }
+    }
+
     const data = {
       stem_tasks: Array.from(store.stem_tasks.entries()),
       user_tracks: Array.from(store.user_tracks.entries()),
