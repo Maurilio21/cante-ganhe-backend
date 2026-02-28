@@ -252,6 +252,21 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already exists' });
     }
 
+    // Check if user is in deleted_users
+    if (memoryStore.deleted_users) {
+      const deletedUser = Array.from(memoryStore.deleted_users.values()).find(
+        (u) => u.email === email || (cpf && u.cpf === cpf)
+      );
+      if (deletedUser) {
+        return res.status(409).json({
+          error: 'User previously deleted',
+          canReactivate: true,
+          userId: deletedUser.id,
+          message: 'Esta conta foi excluída. Deseja reativá-la?'
+        });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password || '123456', 10);
     const newUser = {
       id: uuidv4(),
@@ -285,6 +300,73 @@ router.post('/register', async (req, res) => {
     return res
       .status(500)
       .json({ error: 'Failed to register user. Please try again later.' });
+  }
+});
+
+// Reactivate User
+router.post('/reactivate', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const memoryStore = req.app.locals.memoryStore;
+
+    if (!memoryStore.deleted_users) {
+      return res.status(404).json({ error: 'No deleted users found' });
+    }
+
+    const deletedUser = Array.from(memoryStore.deleted_users.values()).find(
+      (u) => u.email === email
+    );
+
+    if (!deletedUser) {
+      return res.status(404).json({ error: 'User not found in deleted records' });
+    }
+
+    // Restore user
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      deletedUser.password = hashedPassword;
+    }
+    
+    deletedUser.status = 'active';
+    delete deletedUser.deletedAt;
+
+    memoryStore.users.set(deletedUser.id, deletedUser);
+    memoryStore.deleted_users.delete(deletedUser.id);
+    
+    // Audit Log
+    const auditLog = {
+      id: Date.now().toString(),
+      action: 'USER_REACTIVATED',
+      targetId: deletedUser.id,
+      targetEmail: deletedUser.email,
+      timestamp: new Date().toISOString(),
+      details: 'User account reactivated after deletion',
+    };
+    
+    if (!memoryStore.audit_logs) {
+      memoryStore.audit_logs = [];
+    }
+    memoryStore.audit_logs.push(auditLog);
+    
+    memoryStore.save();
+
+    const { password: _, ...userSafe } = deletedUser;
+    
+    // Auto-login (generate token)
+    const token = jwt.sign(
+      {
+        id: deletedUser.id,
+        role: deletedUser.role,
+        permissions: deletedUser.permissions,
+      },
+      SECRET_KEY,
+      { expiresIn: '30m' },
+    );
+
+    return res.json({ message: 'User reactivated successfully', user: userSafe, token });
+  } catch (error) {
+    console.error('Reactivation error:', error);
+    return res.status(500).json({ error: 'Failed to reactivate user' });
   }
 });
 
@@ -573,11 +655,33 @@ router.delete('/:id', verifyToken, (req, res) => {
     if (user.role === 'master') return res.status(403).json({ error: 'Cannot delete Master user' });
 
     memoryStore.users.delete(id);
+    
+    // Move to deleted_users
+    user.deletedAt = new Date().toISOString();
+    user.status = 'deleted';
+    user.deletionReason = req.body.reason || 'No reason provided';
+    
+    if (!memoryStore.deleted_users) {
+      memoryStore.deleted_users = new Map();
+    }
+    memoryStore.deleted_users.set(id, user);
+
     memoryStore.save();
 
-    logAction(req, 'DELETE_USER', id);
+    logAction(req, 'DELETE_USER', id, { reason: user.deletionReason });
 
     res.json({ message: 'User deleted successfully', userId: id });
+});
+
+// Get Audit Logs (Admin/Master only)
+router.get('/audit-logs', verifyToken, requireAdminOrMaster, (req, res) => {
+  const memoryStore = req.app.locals.memoryStore;
+  const logs = memoryStore.audit_logs || [];
+  
+  // Enrich logs with user details if possible (optional, but helpful)
+  // For now, returning raw logs is fine as they contain IDs and basic info.
+  
+  res.json(logs);
 });
 
 // Grant PRO
