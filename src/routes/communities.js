@@ -15,12 +15,17 @@ router.get('/communities', (req, res) => {
     whatsapp: { link: '', active: false },
     telegram: { link: '', active: false },
     helpWhatsapp: { phone: '', message: '' },
-    musicPacks: []
+    musicPacks: [],
+    ignorePacksGuarantee: false
   };
 
   const settings = {
     ...stored,
-    musicPacks: Array.isArray(stored.musicPacks) ? stored.musicPacks : []
+    musicPacks: Array.isArray(stored.musicPacks) ? stored.musicPacks : [],
+    ignorePacksGuarantee:
+      typeof stored.ignorePacksGuarantee === 'boolean'
+        ? stored.ignorePacksGuarantee
+        : false
   };
 
   console.log('[Communities] GET /communities ->', {
@@ -35,7 +40,13 @@ router.get('/communities', (req, res) => {
 
 router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
   const memoryStore = req.app.locals.memoryStore;
-  const { whatsapp, telegram, helpWhatsapp, musicPacks } = req.body;
+  const {
+    whatsapp,
+    telegram,
+    helpWhatsapp,
+    musicPacks,
+    ignorePacksGuarantee,
+  } = req.body;
 
   if (!memoryStore || !memoryStore.settings) {
     console.error('[Communities] PUT /communities failed: Store not initialized');
@@ -122,7 +133,26 @@ router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
       if (!isValidDriveUrl(link)) {
         return res.status(400).json({
           success: false,
-          error: 'Link do pack de músicas inválido. Use um link público do Google Drive.'
+          error:
+            'Link do pack de músicas inválido. Use um link público do Google Drive.'
+        });
+      }
+
+      const availableForBasic =
+        pack.availableForBasic === undefined ||
+        pack.availableForBasic === null
+          ? true
+          : Boolean(pack.availableForBasic);
+      const availableForPro =
+        pack.availableForPro === undefined || pack.availableForPro === null
+          ? true
+          : Boolean(pack.availableForPro);
+
+      if (!availableForBasic && !availableForPro) {
+        return res.status(400).json({
+          success: false,
+          error:
+            'Selecione ao menos um plano (básico ou profissional) para cada pack de músicas.'
         });
       }
     }
@@ -143,12 +173,31 @@ router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
           const id = String(rawId);
           const previous = previousPacks.find((p) => p.id === id) || {};
           const link = String(pack.link || '').trim();
+          const availableForBasic =
+            pack.availableForBasic === undefined ||
+            pack.availableForBasic === null
+              ? true
+              : Boolean(pack.availableForBasic);
+          const availableForPro =
+            pack.availableForPro === undefined ||
+            pack.availableForPro === null
+              ? true
+              : Boolean(pack.availableForPro);
+          const ignoreGuarantee =
+            pack.ignoreGuarantee === undefined ||
+            pack.ignoreGuarantee === null
+              ? false
+              : Boolean(pack.ignoreGuarantee);
+
           return {
             id,
             title: sanitizeText(pack.title || ''),
             link,
             description: sanitizeText(pack.description || ''),
             active: Boolean(pack.active),
+            availableForBasic,
+            availableForPro,
+            ignoreGuarantee,
             createdAt: previous.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
@@ -172,6 +221,10 @@ router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
       updatedAt: new Date().toISOString()
     },
     musicPacks: safePacks,
+    ignorePacksGuarantee:
+      typeof ignorePacksGuarantee === 'boolean'
+        ? ignorePacksGuarantee
+        : Boolean(previousSettings.ignorePacksGuarantee),
     updatedAt: new Date().toISOString()
   };
 
@@ -195,14 +248,31 @@ router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
         ? previousPacks.map((p) => ({
             id: p.id,
             title: p.title,
-            active: p.active
+            active: p.active,
+            availableForBasic:
+              p.availableForBasic === undefined ||
+              p.availableForBasic === null
+                ? true
+                : Boolean(p.availableForBasic),
+            availableForPro:
+              p.availableForPro === undefined || p.availableForPro === null
+                ? true
+                : Boolean(p.availableForPro)
           }))
         : [],
       musicPacksAfter: newSettings.musicPacks.map((p) => ({
         id: p.id,
         title: p.title,
-        active: p.active
-      }))
+        active: p.active,
+        availableForBasic: p.availableForBasic,
+        availableForPro: p.availableForPro,
+        ignoreGuarantee: p.ignoreGuarantee
+      })),
+      ignorePacksGuaranteeBefore:
+        typeof previousSettings.ignorePacksGuarantee === 'boolean'
+          ? previousSettings.ignorePacksGuarantee
+          : false,
+      ignorePacksGuaranteeAfter: newSettings.ignorePacksGuarantee
     }
   };
 
