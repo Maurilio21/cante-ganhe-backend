@@ -441,6 +441,71 @@ router.get('/me', verifyToken, (req, res) => {
   res.json({ success: true, data: userSafe });
 });
 
+router.get('/me/academy-progress', verifyToken, (req, res) => {
+  const memoryStore = req.app.locals.memoryStore;
+  const user = memoryStore.users.get(req.userId);
+
+  if (!user) {
+    return res
+      .status(404)
+      .json({ success: false, error: 'User not found for current token' });
+  }
+
+  const progress = user.academy_progress || {};
+  const completedLessonIds = Array.isArray(progress.completedLessonIds)
+    ? progress.completedLessonIds
+    : [];
+
+  res.json({
+    success: true,
+    data: { completedLessonIds },
+  });
+});
+
+router.post('/me/academy-progress', verifyToken, (req, res) => {
+  const memoryStore = req.app.locals.memoryStore;
+  const user = memoryStore.users.get(req.userId);
+
+  if (!user) {
+    return res
+      .status(404)
+      .json({ success: false, error: 'User not found for current token' });
+  }
+
+  const { lessonId, completed } = req.body || {};
+
+  if (!lessonId || typeof lessonId !== 'string') {
+    return res
+      .status(400)
+      .json({ success: false, error: 'lessonId is required' });
+  }
+
+  const current =
+    user.academy_progress && Array.isArray(user.academy_progress.completedLessonIds)
+      ? user.academy_progress.completedLessonIds
+      : [];
+
+  const set = new Set(current.map((id) => id && id.toString()).filter(Boolean));
+
+  if (completed) {
+    set.add(lessonId);
+  } else {
+    set.delete(lessonId);
+  }
+
+  user.academy_progress = {
+    completedLessonIds: Array.from(set.values()),
+  };
+
+  memoryStore.users.set(req.userId, user);
+  if (memoryStore.save) memoryStore.save();
+
+  res.json({
+    success: true,
+    data: { completedLessonIds: user.academy_progress.completedLessonIds },
+  });
+});
+
 // Create User (Public/Authenticated) - For Admin Panel "Add User" or Registration
 router.post('/', verifyToken, checkPermission('viewUsers'), (req, res) => {
     const {

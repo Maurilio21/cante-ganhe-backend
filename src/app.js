@@ -119,67 +119,70 @@ const reconcileCredits = (store) => {
 };
 
 const loadMemoryStore = () => {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf8');
-      const json = JSON.parse(data);
-      const store = {
-        stem_tasks: new Map(json.stem_tasks),
-        user_tracks: new Map(json.user_tracks),
-        tasks: new Map(json.tasks || []), // Fallback for other tasks if needed
-        settings: new Map(json.settings || []),
-        affiliation_logs: json.affiliation_logs || [],
-        pix_payments: json.pix_payments || [],
-        transactions: json.transactions || [],
-        users: new Map(json.users || []),
-        deleted_users: new Map(json.deleted_users || []),
-        audit_logs: json.audit_logs || [],
-        payment_audit_logs: json.payment_audit_logs || [],
-        invoices: json.invoices || [],
-      };
-      reconcileCredits(store);
-      return store;
-    }
+  const buildStoreFromJson = (json) => ({
+    stem_tasks: new Map(json.stem_tasks || []),
+    user_tracks: new Map(json.user_tracks || []),
+    tasks: new Map(json.tasks || []),
+    settings: new Map(json.settings || []),
+    affiliation_logs: json.affiliation_logs || [],
+    pix_payments: json.pix_payments || [],
+    transactions: json.transactions || [],
+    users: new Map(json.users || []),
+    deleted_users: new Map(json.deleted_users || []),
+    audit_logs: json.audit_logs || [],
+    payment_audit_logs: json.payment_audit_logs || [],
+    invoices: json.invoices || [],
+  });
 
-    if (fs.existsSync(DB_BACKUP_FILE)) {
-      const backupData = fs.readFileSync(DB_BACKUP_FILE, 'utf8');
-      const backupJson = JSON.parse(backupData);
-      const backupStore = {
-        stem_tasks: new Map(backupJson.stem_tasks),
-        user_tracks: new Map(backupJson.user_tracks),
-        tasks: new Map(backupJson.tasks || []),
-        settings: new Map(backupJson.settings || []),
-        affiliation_logs: backupJson.affiliation_logs || [],
-        pix_payments: backupJson.pix_payments || [],
-        transactions: backupJson.transactions || [],
-        users: new Map(backupJson.users || []),
-        deleted_users: new Map(backupJson.deleted_users || []),
-        audit_logs: backupJson.audit_logs || [],
-        payment_audit_logs: backupJson.payment_audit_logs || [],
-        invoices: backupJson.invoices || [],
-      };
-      reconcileCredits(backupStore);
-      console.warn('Loaded memory store from backup file.');
-      return backupStore;
+  const loadFromFile = (filePath, label) => {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const json = JSON.parse(raw);
+    const store = buildStoreFromJson(json);
+    reconcileCredits(store);
+    if (label) {
+      console.warn(`Loaded memory store from ${label}.`);
+    }
+    return store;
+  };
+
+  try {
+    const primary = loadFromFile(DB_FILE, null);
+    if (primary) {
+      return primary;
     }
   } catch (error) {
-    console.error("Error loading dev database:", error);
+    console.error('Error loading primary dev database, trying backup:', error);
   }
-    return {
-      stem_tasks: new Map(),
-      user_tracks: new Map(),
-      tasks: new Map(),
-      settings: new Map(),
-      affiliation_logs: [],
-      pix_payments: [],
-      transactions: [],
-      users: new Map(),
-      deleted_users: new Map(),
-      audit_logs: [],
-      payment_audit_logs: [],
-      invoices: [],
-    };
+
+  try {
+    const backup = loadFromFile(DB_BACKUP_FILE, 'backup file');
+    if (backup) {
+      return backup;
+    }
+  } catch (error) {
+    console.error('Error loading dev database backup:', error);
+  }
+
+  return {
+    stem_tasks: new Map(),
+    user_tracks: new Map(),
+    tasks: new Map(),
+    settings: new Map(),
+    affiliation_logs: [],
+    pix_payments: [],
+    transactions: [],
+    users: new Map(),
+    deleted_users: new Map(),
+    audit_logs: [],
+    payment_audit_logs: [],
+    invoices: [],
+  };
 };
+
+export { loadMemoryStore };
 
 const saveMemoryStore = (store) => {
   try {
@@ -410,8 +413,10 @@ app.get('/', (req, res) => {
   res.send('Cante e Ganhe API Running');
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+if (process.argv[1] === __filename) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
 export default app;
