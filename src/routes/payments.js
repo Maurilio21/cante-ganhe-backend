@@ -322,11 +322,24 @@ router.get('/access-status', (req, res) => {
     const hasPlan = user && user.isPro === true;
 
     const transactions = memoryStore.transactions || [];
-    const hasCompletedPayment = transactions.some(
+    const userCompletedTransactions = transactions.filter(
       (t) =>
         t.userId === userId &&
         (t.status === 'completed' || t.status === 'paid'),
     );
+
+    const hasCompletedPayment = userCompletedTransactions.length > 0;
+
+    let firstPaymentAt = null;
+    if (hasCompletedPayment) {
+      const sorted = userCompletedTransactions
+        .map((t) => new Date(t.createdAt))
+        .filter((d) => !Number.isNaN(d.getTime()))
+        .sort((a, b) => a - b);
+      if (sorted.length > 0) {
+        firstPaymentAt = sorted[0].toISOString();
+      }
+    }
 
     const locks = memoryStore.payment_locks || {};
     const lock = locks[userId];
@@ -345,6 +358,7 @@ router.get('/access-status', (req, res) => {
           accessAllowed: false,
           reason: 'pending_payment_first_time',
           lock,
+          firstPaymentAt,
         },
       });
     }
@@ -355,6 +369,7 @@ router.get('/access-status', (req, res) => {
         accessAllowed: true,
         reason: null,
         lock: null,
+        firstPaymentAt,
       },
     });
   } catch (error) {
