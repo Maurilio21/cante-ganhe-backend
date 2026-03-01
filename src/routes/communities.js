@@ -162,6 +162,16 @@ router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
     ? previousSettings.musicPacks
     : [];
 
+  console.log(
+    '[Communities] PUT /communities incoming musicPacks (id, ignoreGuarantee):',
+    Array.isArray(musicPacks)
+      ? musicPacks.map((p) => ({
+          id: p && p.id,
+          ignoreGuarantee: p && p.ignoreGuarantee
+        }))
+      : musicPacks
+  );
+
   const safePacks = Array.isArray(musicPacks)
     ? musicPacks
         .filter((pack) => pack && typeof pack === 'object')
@@ -203,6 +213,14 @@ router.put('/communities', verifyToken, requireAdminOrMaster, (req, res) => {
           };
         })
     : [];
+
+  console.log(
+    '[Communities] PUT /communities normalized musicPacks (id, ignoreGuarantee):',
+    safePacks.map((p) => ({
+      id: p.id,
+      ignoreGuarantee: p.ignoreGuarantee
+    }))
+  );
 
   const newSettings = {
     whatsapp: {
